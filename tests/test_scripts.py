@@ -93,3 +93,37 @@ def test_keygen_writes_keys_and_prints_single_line_bodies(tmp_path, monkeypatch,
     before = (tmp_path / "connector_rsa_key.p8").read_bytes()
     sf.keygen()
     assert (tmp_path / "connector_rsa_key.p8").read_bytes() == before
+
+
+def test_reconcile_truth_is_internally_consistent():
+    import reconcile
+
+    from simulator.config import SimConfig
+    from simulator.engine import Simulator
+    from simulator.sinks import ListSink, ManifestWriter
+
+    cfg = SimConfig(mode="backfill", start="2026-10-09T19:00", days=0.05, seed=77, emit_pings=True)
+    sink, manifest = ListSink(), ManifestWriter(None)
+    Simulator(cfg, sink, run_id="t", manifest=manifest).run()
+    truth = reconcile.compute_truth(sink.events, manifest.records)
+
+    for topic in reconcile.TOPIC_TABLES:
+        assert (
+            truth[f"bronze rows {topic}"] - truth[f"silver unique events {topic}"]
+            == truth[f"duplicates removed {topic}"]
+        )
+    statuses = sum(v for k, v in truth.items() if k.startswith("orders status="))
+    assert statuses >= truth["orders placed"] > 50
+    zones = sum(v for k, v in truth.items() if k.startswith("orders zone="))
+    assert zones == truth["orders placed"]
+    assert 0 < truth["sla breaches"] < truth["orders status=DELIVERED"]
+    assert truth["orders status=CANCELLED"] == sum(
+        v for k, v in truth.items() if k.startswith("cancel reason=")
+    )
+
+
+def test_reconcile_compare_flags_mismatches():
+    import reconcile
+
+    rows = reconcile.compare({"a": 1, "b": 2}, {"a": 1, "b": 3})
+    assert [ok for *_, ok in rows] == [True, False]

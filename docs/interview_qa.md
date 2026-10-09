@@ -93,3 +93,42 @@ converter config. Then I added a local integration test that runs the real conve
 through a file sink, which fails on the old config and passes on the new one. I also made the
 status command surface DLQ depth. The lesson: error tolerance without monitoring is data loss
 you don't see.
+
+## P3: SILVER/GOLD Dynamic Tables
+
+**Why Dynamic Tables instead of Streams + Tasks?**
+The logic is declarative SQL, and Snowflake handles incremental refresh, dependency ordering
+and scheduling. With Streams + Tasks I'd hand-write MERGEs and own their ordering and retries.
+I set `REFRESH_MODE = INCREMENTAL` explicitly, so if a query can't refresh incrementally,
+`CREATE` fails. Otherwise it would silently become a full refresh and cost far more.
+
+**How do you handle duplicates, late and out-of-order events?**
+- **Duplicates:** `QUALIFY ROW_NUMBER() OVER (PARTITION BY event_id ...) = 1`.
+- **Out-of-order:** order status comes from *which* events exist, using a fixed precedence,
+  never from arrival order.
+- **Late:** there's no watermark. Every refresh folds new BRONZE rows into the affected
+  orders and buckets, so a 6-hour-late event still corrects the numbers.
+
+**Why is "orders at risk" a view and not a Dynamic Table?**
+It depends on the current time, which an incremental Dynamic Table can't maintain. In the
+view, "now" is stream time (the latest event seen), because my simulated runs replay past
+time. In production it would be `CURRENT_TIMESTAMP()`.
+
+**How do you know your GOLD numbers are right?**
+I reconcile against ground truth. One seeded run goes to Kafka while the same events stay in
+memory. Python computes the expected numbers independently, then I compare 37 metrics in
+Snowflake: duplicates removed = duplicates injected, every order status and cancel reason,
+SLA breaches, GMV to the rupee, per-zone counts, and every GOLD table summing back to SILVER.
+37/37 match. Data-quality checks (no impossible lifecycles, H3 agreement) are all 0.
+
+**Explain TARGET_LAG = DOWNSTREAM.**
+The table refreshes only when a table that reads it needs fresh data, so SILVER never costs
+more than GOLD's lag. Gotcha: a DOWNSTREAM table that nothing reads *never* refreshes. I hit
+that with REFERENCE_EVENTS, which has no consumer until P4, so it has its own lag for now.
+
+**How do you control Dynamic Table cost?**
+- An XSMALL warehouse.
+- A 10-minute lag by default, with 1 minute only for demos.
+- Refreshes are skipped when the base tables haven't changed.
+- `make stop` suspends every Dynamic Table before suspending the warehouses.
+- The initial build plus a full reconciliation cost well under 0.1 credits.

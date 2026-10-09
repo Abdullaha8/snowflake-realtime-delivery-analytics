@@ -21,9 +21,9 @@ SPEED ?= 1
 ARGS ?=
 OUT ?= data/sim
 
-.PHONY: help install up down stop topics schemas schemas-register schemas-check \
+.PHONY: help install up build down stop topics schemas schemas-register schemas-check \
         connector-up connector-status connector-down sf-keygen sf-setup sf-verify sf-suspend \
-        load-backfill sim sim-sample sim-backfill sim-report lint format test test-integration clean
+        load-backfill sf-reset-bronze sf-dt dt-status dt-refresh dt-demo dt-normal dt-suspend         dt-resume sf-verify-dt reconcile sim sim-sample sim-backfill sim-report lint format test test-integration clean
 
 help:  ## list targets
 	@$(PY) -c "import re;[print(f'  {m[0]:<18}{m[1]}') for m in re.findall(r'^([a-z-]+):.*?## (.*)$$', open('Makefile').read(), re.M)]"
@@ -34,15 +34,21 @@ install:  ## create .venv (Python 3.11) and install deps
 	$(PY) -m pip install -e ".[kafka,snowflake,dev]"
 
 # --- local streaming stack ---------------------------------------------------------------
+# No --build here: rebuilding on every start re-checks Docker Hub, so a Hub hiccup would stop
+# a local stack whose image is already built. Compose still builds the image if it is missing.
 up:  ## start Kafka, Schema Registry, Connect, kafka-ui (creates topics); connector NOT started
-	$(COMPOSE) up -d --build --wait
+	$(COMPOSE) up -d --wait
+
+build:  ## rebuild the Kafka Connect image (after changing infra/connect/Dockerfile)
+	$(COMPOSE) build connect
 
 down:  ## remove containers (keeps the Kafka volume)
 	$(COMPOSE) down
 
-stop:  ## delete the connector, stop containers, suspend Snowflake warehouses
+stop:  ## delete connector, stop containers, suspend Dynamic Tables + warehouses
 	-$(PY) scripts/connect.py delete
 	-$(COMPOSE) stop
+	-$(PY) scripts/sf.py dt suspend
 	-$(PY) scripts/sf.py suspend
 
 topics:  ## end offsets per topic-partition (= messages produced)
@@ -82,6 +88,37 @@ load-backfill:  ## PUT data/backfill to the stage and COPY into BRONZE (uses WH_
 
 sf-suspend:  ## suspend all project warehouses
 	$(PY) scripts/sf.py suspend
+
+sf-reset-bronze:  ## DEV only: truncate the BRONZE tables (before a reconciliation run)
+	$(PY) scripts/sf.py reset-bronze
+
+# --- Dynamic Tables (P3) -----------------------------------------------------------------
+sf-dt:  ## (re)create SILVER + GOLD Dynamic Tables (initial build uses WH_TRANSFORM)
+	$(PY) scripts/sf.py run snowflake/05_silver.sql snowflake/06_gold.sql
+
+dt-status:  ## state, refresh mode (must be INCREMENTAL) and lag of every Dynamic Table
+	$(PY) scripts/sf.py dt status
+
+dt-refresh:  ## refresh GOLD now (and the SILVER tables it reads)
+	$(PY) scripts/sf.py dt refresh
+
+dt-demo:  ## GOLD lag -> 1 minute (demos only: ~1 credit/hour while data flows)
+	$(PY) scripts/sf.py dt lag "1 minute"
+
+dt-normal:  ## GOLD lag -> 10 minutes (project default)
+	$(PY) scripts/sf.py dt lag "10 minutes"
+
+dt-suspend:  ## suspend all Dynamic Tables (no refreshes, no cost)
+	$(PY) scripts/sf.py dt suspend
+
+dt-resume:  ## resume all Dynamic Tables
+	$(PY) scripts/sf.py dt resume
+
+sf-verify-dt:  ## data-quality checks + headline numbers on SILVER/GOLD
+	$(PY) scripts/sf.py verify-dt
+
+reconcile:  ## produce a seeded run and compare SILVER/GOLD with simulator ground truth
+	$(PY) scripts/reconcile.py
 
 # --- simulator ---------------------------------------------------------------------------
 sim:  ## live simulator, auto-stops after DURATION wall seconds (SINK=stdout|jsonl|kafka)

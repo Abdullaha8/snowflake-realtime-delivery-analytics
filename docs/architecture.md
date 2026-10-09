@@ -24,7 +24,8 @@ flowchart LR
 |---|---|---|
 | P1 | done | simulator, Makefile, tests |
 | P2 | done, verified end-to-end | topics, Schema Registry (Avro), Kafka Connect + Snowflake sink v4, BRONZE DDL, RBAC, backfill COPY |
-| P3-P8 | planned | see CLAUDE.md |
+| P3 | done, reconciled 37/37 | SILVER Dynamic Tables (dedup, typing, order lifecycle), GOLD Dynamic Tables (demand/supply + surge, SLA breaches, restaurant perf, H3 hex demand), at-risk view |
+| P4-P8 | planned | see CLAUDE.md |
 
 ## Local stack (`make up`)
 
@@ -47,6 +48,30 @@ flowchart LR
 | `FOODDEL_INGEST` / `_TRANSFORM` / `_BI` | functional roles under SYSADMIN |
 | `SVC_KAFKA_CONNECTOR` | TYPE=SERVICE, key-pair only |
 
+## Dynamic Tables (P3)
+
+```mermaid
+flowchart LR
+    OR[BRONZE.ORDERS_RAW] --> OE[SILVER.ORDER_EVENTS<br/>dedup]
+    DR[BRONZE.DRIVER_LOCATIONS_RAW] --> DP[SILVER.DRIVER_PINGS<br/>dedup + H3]
+    RR[BRONZE.REFERENCE_RAW] --> RE[SILVER.REFERENCE_EVENTS<br/>dedup]
+    OE --> O[SILVER.ORDERS<br/>1 row/order]
+    O --> ZD[GOLD.ZONE_DEMAND_SUPPLY_5M<br/>surge signal]
+    DP --> ZD
+    O --> SB[GOLD.SLA_BREACHES]
+    O --> RP[GOLD.RESTAURANT_PERF_HOURLY]
+    O --> HX[GOLD.HEX_DEMAND_HOURLY]
+    O --> AR[GOLD.V_ORDERS_AT_RISK<br/>view, stream time]
+    OE --> AR
+```
+
+| Layer | Target lag | Refresh mode |
+|---|---|---|
+| SILVER (ORDER_EVENTS, DRIVER_PINGS, ORDERS) | DOWNSTREAM | INCREMENTAL |
+| SILVER.REFERENCE_EVENTS | 10 minutes (no consumers until P4) | INCREMENTAL |
+| GOLD | 10 minutes (`make dt-demo` -> 1 minute) | INCREMENTAL |
+
 ## Design rationale
 - [ADR 0001: simulator](decisions/0001-simulator-design.md)
 - [ADR 0002: Kafka, Schema Registry, Snowflake ingestion](decisions/0002-kafka-schema-registry-snowflake-ingestion.md)
+- [ADR 0003: SILVER/GOLD Dynamic Tables](decisions/0003-dynamic-tables-silver-gold.md)

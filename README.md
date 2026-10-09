@@ -10,7 +10,8 @@ Tables + dbt → Snowpark ML → Streamlit. See [docs/architecture.md](docs/arch
 |---|---|---|
 | P1 | ✅ | Repo scaffold, Makefile, event simulator + tests |
 | P2 | ✅ | Kafka topics, Schema Registry (Avro), Kafka Connect + Snowflake sink v4 → BRONZE, backfill COPY |
-| P3–P8 | ⏳ | Dynamic Tables, dbt, Airflow, ML, governance, dashboards |
+| P3 | ✅ | SILVER/GOLD Dynamic Tables: dedup, order lifecycle, demand/supply + surge, SLA breaches, restaurant perf, H3 (reconciled 37/37 vs ground truth) |
+| P4–P8 | ⏳ | dbt, Airflow, ML, governance, dashboards |
 
 ## Quick start
 
@@ -47,7 +48,18 @@ make sim SINK=kafka SPEED=60 DURATION=120
 make connector-status   # RUNNING, 3 tasks
 make sf-verify          # row counts, offset gaps, latency, sample row
 make load-backfill      # optional: ~100 days of history into BRONZE via stage + COPY
-make stop               # delete connector, stop containers, suspend warehouses
+make stop               # delete connector, stop containers, suspend Dynamic Tables + warehouses
+```
+
+### Real-time layer: Dynamic Tables (P3)
+
+```bash
+make sf-dt              # create SILVER + GOLD Dynamic Tables (INCREMENTAL, GOLD lag 10 min)
+make dt-status          # ACTIVE / SUSPENDED, refresh mode, lag
+make sf-reset-bronze    # DEV only: empty BRONZE before a reconciliation run
+make reconcile          # seeded run -> Kafka -> BRONZE -> SILVER/GOLD vs Python ground truth (37 metrics)
+make sf-verify-dt       # data-quality checks (all 0), headline KPIs, top surge buckets, orders at risk
+make dt-demo            # GOLD lag 1 minute for a live demo (remember: make dt-normal)
 ```
 
 ## The simulator
@@ -74,15 +86,15 @@ python -m simulator report <dir>    # volumes, KPIs, observed vs injected chaos
 python -m simulator schemas         # regenerate JSON Schemas
 ```
 
-Design rationale: [ADR 0001](docs/decisions/0001-simulator-design.md), [ADR 0002](docs/decisions/0002-kafka-schema-registry-snowflake-ingestion.md).
+Design rationale: [ADR 0001](docs/decisions/0001-simulator-design.md), [ADR 0002](docs/decisions/0002-kafka-schema-registry-snowflake-ingestion.md), [ADR 0003](docs/decisions/0003-dynamic-tables-silver-gold.md).
 
 ## Repo layout
 
 ```
 simulator/      event generator (zones, demand, entities, engine, chaos, sinks, report)
 infra/          docker-compose (Kafka, Schema Registry, Connect, kafka-ui), topic script, connector config
-snowflake/      numbered, idempotent SQL: 01_setup, 02_rbac, 03_bronze, 04_backfill_copy, 90_verify_bronze
-scripts/        sf.py (Snowflake runner, key-pair auth), connect.py (Kafka Connect REST)
+snowflake/      numbered, idempotent SQL: 01_setup, 02_rbac, 03_bronze, 04_backfill_copy, 05_silver, 06_gold, 90/91_verify
+scripts/        sf.py (Snowflake runner, DT ops), connect.py (Kafka Connect REST), reconcile.py (ground-truth check)
 dbt/ airflow/ ml/ streamlit/   later phases
 docs/           architecture, ADRs, interview Q&A
 tests/          pytest

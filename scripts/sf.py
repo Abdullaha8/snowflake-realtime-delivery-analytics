@@ -5,6 +5,10 @@ python scripts/sf.py run FILE [FILE ...]    run SQL files (${SNOWFLAKE_*} placeh
 python scripts/sf.py verify                 run snowflake/90_verify_bronze.sql and print results
 python scripts/sf.py load-backfill [DIR]    PUT data/backfill JSONL to the stage, then COPY INTO BRONZE
 python scripts/sf.py suspend                suspend all project warehouses
+python scripts/sf.py verify-dt              run snowflake/91_verify_dt.sql and print results
+python scripts/sf.py dt status|suspend|resume|refresh
+python scripts/sf.py dt lag '1 minute'      set GOLD target lag (SILVER stays DOWNSTREAM)
+python scripts/sf.py reset-bronze           DEV only: truncate the BRONZE tables
 """
 
 from __future__ import annotations
@@ -158,6 +162,79 @@ def load_backfill(data_dir: str = "data/backfill") -> int:
     return run_files([str(SQL_DIR / "04_backfill_copy.sql")], show_results=True)
 
 
+# -- dynamic tables ------------------------------------------------------------------------
+GOLD_DTS = ("ZONE_DEMAND_SUPPLY_5M", "SLA_BREACHES", "RESTAURANT_PERF_HOURLY", "HEX_DEMAND_HOURLY")
+BRONZE_TABLES = ("ORDERS_RAW", "DRIVER_LOCATIONS_RAW", "REFERENCE_RAW")
+
+
+def list_dts(cur) -> list[dict]:  # noqa: ANN001
+    db = os.environ.get("SNOWFLAKE_DATABASE", "FOODDEL_DEV")
+    cur.execute(f"SHOW DYNAMIC TABLES IN DATABASE {db}")
+    names = [d[0] for d in cur.description]
+    return [dict(zip(names, row, strict=True)) for row in cur.fetchall()]
+
+
+def refresh_targets(dts: list[dict]) -> list[dict]:
+    """Dynamic Tables with their own target lag (not DOWNSTREAM-only)."""
+    return [d for d in dts if str(d.get("target_lag")).upper() != "DOWNSTREAM"]
+
+
+def dt(action: str, arg: str | None = None) -> int:
+    from snowflake.connector.errors import ProgrammingError
+
+    db = os.environ.get("SNOWFLAKE_DATABASE", "FOODDEL_DEV")
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("USE ROLE FOODDEL_TRANSFORM")
+        dts = list_dts(cur)
+        if not dts:
+            print("no dynamic tables (run `make sf-dt`)")
+            return 0 if action in ("suspend", "status") else 1
+        if action == "status":
+            cols = ["schema_name", "name", "target_lag", "refresh_mode", "scheduling_state", "rows"]
+            print("  " + " | ".join(cols))
+            for d in sorted(dts, key=lambda d: (d["schema_name"], d["name"])):
+                print("  " + " | ".join(str(d.get(c)) for c in cols))
+                if d.get("refresh_mode") != "INCREMENTAL":
+                    print(f"    refresh_mode_reason: {d.get('refresh_mode_reason')}")
+            return 0
+        if action == "lag":
+            if not arg:
+                sys.exit("usage: sf.py dt lag '10 minutes'")
+            for name in GOLD_DTS:
+                cur.execute(f"ALTER DYNAMIC TABLE {db}.GOLD.{name} SET TARGET_LAG = '{arg}'")
+                print(f"GOLD.{name}: TARGET_LAG = '{arg}'")
+            return 0
+        # Suspend downstream first (GOLD), resume upstream first (SILVER).
+        layer = {"SILVER": 0, "GOLD": 1, "MARTS": 2}
+        order = sorted(
+            dts, key=lambda d: layer.get(d["schema_name"], 9), reverse=(action == "suspend")
+        )
+        if action == "refresh":
+            # Refresh every table with its own lag; that also refreshes the DOWNSTREAM tables
+            # it reads. (A DOWNSTREAM table nobody reads would never refresh.)
+            order = refresh_targets(dts)
+        for d in order:
+            fq = f"{db}.{d['schema_name']}.{d['name']}"
+            try:
+                cur.execute(f"ALTER DYNAMIC TABLE {fq} {action.upper()}")
+                print(f"{d['schema_name']}.{d['name']}: {action}")
+            except ProgrammingError as e:
+                print(f"{d['schema_name']}.{d['name']}: {action} skipped ({e.msg[:80]})")
+    return 0
+
+
+def reset_bronze() -> int:
+    db = os.environ.get("SNOWFLAKE_DATABASE", "")
+    if not db.endswith("_DEV"):
+        sys.exit(f"refusing to truncate BRONZE in {db or '<unset>'}: DEV databases only")
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("USE ROLE SYSADMIN")
+        for t in BRONZE_TABLES:
+            cur.execute(f"TRUNCATE TABLE IF EXISTS {db}.BRONZE.{t}")
+            print(f"{db}.BRONZE.{t}: truncated")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     load_dotenv()
     if not argv:
@@ -174,6 +251,12 @@ def main(argv: list[str]) -> int:
         return load_backfill(*rest)
     if cmd == "suspend":
         return suspend()
+    if cmd == "verify-dt":
+        return run_files([str(SQL_DIR / "91_verify_dt.sql")], show_results=True)
+    if cmd == "dt" and rest and rest[0] in ("status", "suspend", "resume", "refresh", "lag"):
+        return dt(rest[0], rest[1] if len(rest) > 1 else None)
+    if cmd == "reset-bronze":
+        return reset_bronze()
     print(__doc__)
     return 2
 

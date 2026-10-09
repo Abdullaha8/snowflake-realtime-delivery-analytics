@@ -76,4 +76,9 @@ P8 Streamlit dashboards, Terraform, GitHub Actions, final README, resume bullets
   - BRONZE: `ORDERS_RAW`, `DRIVER_LOCATIONS_RAW`, `REFERENCE_RAW` (RECORD_METADATA/RECORD_CONTENT VARIANT, change tracking on). Default pipes `<TABLE>-STREAMING` auto-created. Backfill rows (if loaded) have `RECORD_METADATA:source = 'backfill'`; backfill NOT loaded yet.
   - Results: BRONZE rows = Kafka messages per topic (56,173 / 1,587 / 4,944); offset GAPS = 0 on all 9 partitions; fresh run 3,896 emitted = 3,896 rows, 1.82% dups; Kafka→push p50 0.06 s. Current BRONZE has many cross-run duplicates (same seeds replayed in tests) – fine for P3 dedup.
   - Roles: FOODDEL_INGEST (connector), FOODDEL_TRANSFORM, FOODDEL_BI; user SVC_KAFKA_CONNECTOR (TYPE=SERVICE, key-pair). Resource monitors 5 cr/warehouse, 20 account (~0.1 used).
-- [ ] P3
+- [x] P3 (2026-10-10): SILVER/GOLD Dynamic Tables, reconciled 37/37 against simulator ground truth. ADR 0003.
+  - SILVER (DOWNSTREAM, INCREMENTAL): ORDER_EVENTS, DRIVER_PINGS (+H3 recompute/H3_MATCH), ORDERS (1 row/order, status by precedence, HAS_PLACED). REFERENCE_EVENTS has its own '10 minutes' lag until P4 reads it (DOWNSTREAM with no consumer never refreshes); switch it to DOWNSTREAM in P4.
+  - GOLD ('10 minutes', INCREMENTAL): ZONE_DEMAND_SUPPLY_5M (surge bands), SLA_BREACHES, RESTAURANT_PERF_HOURLY, HEX_DEMAND_HOURLY; view V_ORDERS_AT_RISK (stream time = MAX(event_ts)). Buckets in IST.
+  - Ops: `make sf-dt`, `dt-status`, `dt-refresh` (refreshes own-lag tables), `dt-demo`/`dt-normal`, `dt-suspend`/`dt-resume`, `sf-verify-dt`, `sf-reset-bronze` (DEV only), `reconcile` (`--no-produce` to re-check). `make stop` suspends DTs. `make up` no longer rebuilds (`make build` does).
+  - BRONZE currently = reconcile run seed 77 only (47,406 rows). Backfill not loaded (P4).
+- [ ] P4
