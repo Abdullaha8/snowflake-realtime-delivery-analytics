@@ -132,3 +132,37 @@ that with REFERENCE_EVENTS, which has no consumer until P4, so it has its own la
 - Refreshes are skipped when the base tables haven't changed.
 - `make stop` suspends every Dynamic Table before suspending the warehouses.
 - The initial build plus a full reconciliation cost well under 0.1 credits.
+
+## P4: dbt historical layer
+
+**Why does dbt read SILVER instead of BRONZE?**
+Dedup and order lifecycle are solved and reconciled once, in SILVER. If dbt re-implemented
+them, I'd have two versions of the truth that could drift. dbt does what it's best at:
+dimensional modelling, history, tests and documentation.
+
+**How did you build SCD2?**
+From the event log. Each RESTAURANT_UPDATED event starts a version: `valid_from` is the
+change time and `valid_to` is the next change (`LEAD`). Consecutive identical states are
+collapsed. A dbt snapshot records state *when dbt runs*, so loading 100 days at once would
+have squashed every change into one version. I still include a check-strategy snapshot,
+because that's the right tool when a source only exposes current state. Facts join
+point-in-time, so an order placed before a rating change sees the old rating.
+
+**How does your incremental model handle late data?**
+`fct_orders` merges on `order_id` and re-processes every order whose latest event was emitted
+within 24 h of the newest one loaded. Late events arrive up to 6 h late, so 24 h covers them
+with margin. After a live session, Snowflake reported 7 rows inserted and 2,414 updated:
+exactly the new orders plus the lookback window. A backfill of *older* dates needs
+`--full-refresh`, and I documented that in the model.
+
+**How do you know the marts are right?**
+- 39 dbt tests: keys, relationships, accepted values, a money identity, SCD2 integrity, marts
+  adding back up to the fact table, cohort month 0 = 100%.
+- A reconciliation that recomputes 35 metrics from the raw backfill files in plain Python:
+  orders, GMV, AOV, cancel reasons, SLA breaches, per month, per zone, cohort sizes,
+  month+1 retention. 35/35 match.
+
+**What's your cohort definition?**
+The IST month of a customer's first order, not the signup month. Retention in month N means
+at least one order N months after the cohort month. Using order activity avoids counting
+people who signed up and never ordered.

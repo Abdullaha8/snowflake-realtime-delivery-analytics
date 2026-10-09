@@ -1,0 +1,17 @@
+# All values come from .env (loaded by the Makefile). Run from the repo root:
+#   dbt build --project-dir dbt --profiles-dir dbt     (or simply: make dbt)
+# Defaults let `dbt parse` work offline without any Snowflake settings.
+fooddel:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT', 'unset') }}"
+      user: "{{ env_var('SNOWFLAKE_ADMIN_USER', 'unset') }}"
+      private_key_path: "{{ env_var('SNOWFLAKE_ADMIN_PRIVATE_KEY_PATH', 'secrets/admin_rsa_key.p8') }}"
+      role: FOODDEL_TRANSFORM
+      warehouse: WH_TRANSFORM
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'FOODDEL_DEV') }}"
+      schema: MARTS
+      threads: 4
+      client_session_keep_alive: false

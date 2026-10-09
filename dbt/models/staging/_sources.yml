@@ -1,0 +1,24 @@
+version: 2
+
+sources:
+  - name: silver
+    description: >
+      SILVER Dynamic Tables (snowflake/05_silver.sql). Dedup, typing and order lifecycle are
+      solved there once and reconciled against ground truth; dbt builds history on top.
+    database: "{{ env_var('SNOWFLAKE_DATABASE', 'FOODDEL_DEV') }}"
+    schema: SILVER
+    tables:
+      - name: ORDERS
+        description: One row per order, status by event precedence.
+        config:
+          loaded_at_field: LAST_EMITTED_TS
+          freshness:
+            warn_after: {count: 24, period: hour}
+        columns:
+          - name: ORDER_ID
+            data_tests: [unique, not_null]
+      - name: REFERENCE_EVENTS
+        description: Deduplicated RESTAURANT_UPDATED, CUSTOMER_REGISTERED and WEATHER_UPDATED events.
+        columns:
+          - name: EVENT_ID
+            data_tests: [unique, not_null]

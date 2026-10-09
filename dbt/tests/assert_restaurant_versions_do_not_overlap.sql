@@ -1,0 +1,9 @@
+-- SCD2 integrity: a restaurant's versions never overlap in time.
+SELECT A.RESTAURANT_ID, A.RESTAURANT_SK, B.RESTAURANT_SK AS OVERLAPPING_SK
+FROM {{ ref('dim_restaurant') }} AS A
+INNER JOIN {{ ref('dim_restaurant') }} AS B
+    ON
+        A.RESTAURANT_ID = B.RESTAURANT_ID
+        AND A.RESTAURANT_SK != B.RESTAURANT_SK
+        AND A.VALID_FROM < COALESCE(B.VALID_TO, '9999-12-31'::TIMESTAMP_NTZ)
+        AND B.VALID_FROM < COALESCE(A.VALID_TO, '9999-12-31'::TIMESTAMP_NTZ)

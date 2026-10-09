@@ -23,7 +23,7 @@ OUT ?= data/sim
 
 .PHONY: help install up build down stop topics schemas schemas-register schemas-check \
         connector-up connector-status connector-down sf-keygen sf-setup sf-verify sf-suspend \
-        load-backfill sf-reset-bronze sf-dt dt-status dt-refresh dt-demo dt-normal dt-suspend         dt-resume sf-verify-dt reconcile sim sim-sample sim-backfill sim-report lint format test test-integration clean
+        load-backfill sf-reset-bronze dbt-deps dbt dbt-freshness dbt-docs dbt-docs-serve reconcile-marts seeds-gen sf-dt dt-status dt-refresh dt-demo dt-normal dt-suspend         dt-resume sf-verify-dt reconcile sim sim-sample sim-backfill sim-report lint format test test-integration clean
 
 help:  ## list targets
 	@$(PY) -c "import re;[print(f'  {m[0]:<18}{m[1]}') for m in re.findall(r'^([a-z-]+):.*?## (.*)$$', open('Makefile').read(), re.M)]"
@@ -31,7 +31,8 @@ help:  ## list targets
 install:  ## create .venv (Python 3.11) and install deps
 	$(BOOTSTRAP_PY) -m venv .venv
 	$(PY) -m pip install --upgrade pip
-	$(PY) -m pip install -e ".[kafka,snowflake,dev]"
+	$(PY) -m pip install -e ".[kafka,snowflake,dbt,dev]"
+	$(DBT) deps $(DBT_DIRS)
 
 # --- local streaming stack ---------------------------------------------------------------
 # No --build here: rebuilding on every start re-checks Docker Hub, so a Hub hiccup would stop
@@ -120,6 +121,31 @@ sf-verify-dt:  ## data-quality checks + headline numbers on SILVER/GOLD
 reconcile:  ## produce a seeded run and compare SILVER/GOLD with simulator ground truth
 	$(PY) scripts/reconcile.py
 
+# --- dbt historical layer (P4) -----------------------------------------------------------
+DBT := $(PY) -m dbt.cli.main
+DBT_DIRS := --project-dir dbt --profiles-dir dbt
+
+dbt-deps:  ## install dbt packages (dbt_utils)
+	$(DBT) deps $(DBT_DIRS)
+
+dbt:  ## dbt build: seeds, models, snapshot, tests (uses WH_TRANSFORM). ARGS="--full-refresh"
+	$(DBT) build $(DBT_DIRS) $(ARGS)
+
+dbt-freshness:  ## source freshness of SILVER.ORDERS
+	$(DBT) source freshness $(DBT_DIRS)
+
+dbt-docs:  ## generate dbt docs (lineage + column docs); view with: make dbt-docs-serve
+	$(DBT) docs generate $(DBT_DIRS)
+
+dbt-docs-serve:  ## serve the generated docs on http://localhost:8001
+	$(DBT) docs serve $(DBT_DIRS) --port 8001
+
+reconcile-marts:  ## compare MARTS with the backfill's ground truth (data/backfill)
+	$(PY) scripts/reconcile_marts.py
+
+seeds-gen:  ## regenerate dbt zone seeds from the simulator zone map
+	$(PY) scripts/gen_zone_seeds.py
+
 # --- simulator ---------------------------------------------------------------------------
 sim:  ## live simulator, auto-stops after DURATION wall seconds (SINK=stdout|jsonl|kafka)
 	$(PY) -m simulator run --mode live --sink $(SINK) --duration $(DURATION) --speed $(SPEED) --out $(OUT) $(ARGS)
@@ -128,8 +154,8 @@ sim-sample:  ## 3 simulated hours of Friday dinner rush -> data/sample (jsonl), 
 	$(PY) -m simulator run --mode backfill --start 2026-10-09T19:00 --days 0.125 --pings --seed 42 --sink jsonl --out data/sample --overwrite $(ARGS)
 	$(PY) -m simulator report data/sample
 
-sim-backfill:  ## history since launch (2026-07-01) -> data/backfill (gzipped jsonl, no pings)
-	$(PY) -m simulator run --mode backfill --sink jsonl --gzip --out data/backfill --overwrite $(ARGS)
+sim-backfill:  ## history since launch (2026-07-01) -> data/backfill (gzipped jsonl, no pings, seed 2026)
+	$(PY) -m simulator run --mode backfill --sink jsonl --gzip --out data/backfill --overwrite --seed 2026 $(ARGS)
 
 sim-report:  ## summarise a jsonl run: make sim-report OUT=data/sample
 	$(PY) -m simulator report $(OUT)
@@ -145,9 +171,11 @@ format:  ## ruff --fix + black + sqlfluff fix
 	$(PY) -m black simulator scripts tests
 	$(PY) -m sqlfluff fix snowflake -f
 
-# dbt test joins this target in P4, once there is a dbt project.
-test: lint  ## lint + unit tests (+ dbt test from P4)
+# Offline only: `dbt parse` validates the dbt project without a warehouse. dbt's data tests
+# run against Snowflake as part of `make dbt` (they cost credits).
+test: lint  ## lint + unit tests + dbt parse (offline)
 	$(PY) -m pytest
+	$(DBT) parse $(DBT_DIRS)
 
 test-integration:  ## tests against the local docker stack (run `make up` first)
 	$(PY) -m pytest -m integration

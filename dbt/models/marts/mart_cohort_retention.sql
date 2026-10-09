@@ -1,0 +1,29 @@
+-- Monthly cohort retention. Cohort = IST month of a customer's first order; a customer is
+-- "retained" in month N if they placed at least one order N months after their cohort month.
+WITH ACTIVITY AS (
+    SELECT DISTINCT
+        F.CUSTOMER_ID,
+        C.COHORT_MONTH,
+        DATE_TRUNC('month', F.PLACED_DATE_IST) AS ACTIVITY_MONTH
+    FROM {{ ref('fct_orders') }} AS F
+    INNER JOIN {{ ref('dim_customer') }} AS C ON F.CUSTOMER_ID = C.CUSTOMER_ID
+),
+
+COHORT_SIZE AS (
+    SELECT
+        COHORT_MONTH,
+        COUNT(DISTINCT CUSTOMER_ID) AS COHORT_CUSTOMERS
+    FROM ACTIVITY
+    GROUP BY 1
+)
+
+SELECT
+    A.COHORT_MONTH,
+    DATEDIFF('month', A.COHORT_MONTH, A.ACTIVITY_MONTH) AS MONTHS_SINCE_FIRST_ORDER,
+    A.ACTIVITY_MONTH,
+    S.COHORT_CUSTOMERS,
+    COUNT(DISTINCT A.CUSTOMER_ID) AS ACTIVE_CUSTOMERS,
+    ROUND(100 * COUNT(DISTINCT A.CUSTOMER_ID) / S.COHORT_CUSTOMERS, 2) AS RETENTION_PCT
+FROM ACTIVITY AS A
+INNER JOIN COHORT_SIZE AS S ON A.COHORT_MONTH = S.COHORT_MONTH
+GROUP BY 1, 2, 3, 4

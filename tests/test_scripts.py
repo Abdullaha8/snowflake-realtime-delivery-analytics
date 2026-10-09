@@ -127,3 +127,11 @@ def test_reconcile_compare_flags_mismatches():
 
     rows = reconcile.compare({"a": 1, "b": 2}, {"a": 1, "b": 3})
     assert [ok for *_, ok in rows] == [True, False]
+
+
+def test_dbt_zone_seeds_match_the_simulator_zone_map():
+    import gen_zone_seeds
+
+    for name, text in gen_zone_seeds.render().items():
+        committed = (ROOT / "dbt" / "seeds" / name).read_text(encoding="utf-8")
+        assert committed == text, f"dbt/seeds/{name} is stale: run python scripts/gen_zone_seeds.py"

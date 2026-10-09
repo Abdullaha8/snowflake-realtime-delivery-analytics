@@ -1,0 +1,21 @@
+-- Calendar from launch (2026-07-01) through 2027.
+WITH SPINE AS (
+    {{ dbt_utils.date_spine(
+        datepart="day",
+        start_date="'2026-07-01'::DATE",
+        end_date="'2028-01-01'::DATE"
+    ) }}
+)
+
+SELECT
+    DATE_DAY::DATE AS DATE_DAY,
+    YEAR(DATE_DAY) AS YEAR,
+    MONTH(DATE_DAY) AS MONTH,
+    DATE_TRUNC('month', DATE_DAY)::DATE AS MONTH_START,
+    TO_CHAR(DATE_DAY, 'YYYY-MM') AS YEAR_MONTH,
+    WEEKOFYEAR(DATE_DAY) AS WEEK_OF_YEAR,
+    DAYNAME(DATE_DAY) AS DAY_NAME,
+    DAYOFWEEKISO(DATE_DAY) AS DAY_OF_WEEK_ISO,
+    DAYOFWEEKISO(DATE_DAY) >= 6 AS IS_WEEKEND,
+    MONTH(DATE_DAY) BETWEEN 6 AND 9 AS IS_MONSOON
+FROM SPINE

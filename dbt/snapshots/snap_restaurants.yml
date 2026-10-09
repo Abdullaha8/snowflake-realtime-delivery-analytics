@@ -1,0 +1,12 @@
+snapshots:
+  - name: snap_restaurants
+    description: >
+      Standard dbt snapshot (check strategy) of the current restaurant state. It records changes
+      between dbt runs from now on. dim_restaurant's full history comes from the change events
+      instead (int_restaurant_versions); see ADR 0004 for when each approach fits.
+    relation: ref('int_restaurant_current')
+    config:
+      schema: STAGING
+      unique_key: RESTAURANT_ID
+      strategy: check
+      check_cols: all

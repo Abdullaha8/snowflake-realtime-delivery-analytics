@@ -1,0 +1,122 @@
+version: 2
+
+models:
+  - name: fct_orders
+    description: >
+      One row per order (grain: ORDER_ID). Incremental merge; late and out-of-order events
+      update the existing row within the lookback window. Joined point-in-time to the
+      restaurant version valid when the order was placed.
+    columns:
+      - name: ORDER_ID
+        description: Order id from the simulator (ord_...).
+        data_tests: [unique, not_null]
+      - name: CUSTOMER_ID
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customer')
+                field: CUSTOMER_ID
+      - name: RESTAURANT_SK
+        description: Surrogate key of the restaurant version valid at PLACED_TS.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_restaurant')
+                field: RESTAURANT_SK
+      - name: ZONE_ID
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_zone')
+                field: ZONE_ID
+      - name: DRIVER_ID
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_driver')
+                field: DRIVER_ID
+      - name: PLACED_DATE_IST
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: DATE_DAY
+      - name: ORDER_STATUS
+        description: Derived from which lifecycle events exist (precedence), not arrival order.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [PLACED, ACCEPTED, DRIVER_ASSIGNED, PICKED_UP, DELIVERED, CANCELLED]
+      - name: TOTAL_INR
+        description: subtotal + delivery fee + surge fee - discount.
+        data_tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "= SUBTOTAL_INR + DELIVERY_FEE_INR + SURGE_FEE_INR - DISCOUNT_INR"
+      - name: GMV_INR
+        description: TOTAL_INR for delivered orders, 0 otherwise.
+      - name: SLA_BREACHED
+        description: Delivered later than the promised ETA.
+
+  - name: dim_restaurant
+    description: >
+      SCD2 restaurant dimension built from RESTAURANT_UPDATED events (grain: restaurant version).
+      The first version is open-ended to the past (VALID_FROM 1900-01-01).
+    columns:
+      - name: RESTAURANT_SK
+        data_tests: [unique, not_null]
+      - name: RESTAURANT_ID
+        data_tests: [not_null]
+      - name: VALID_FROM
+        data_tests: [not_null]
+
+  - name: dim_customer
+    description: Customers with signup channel, cohort month (first-order month) and lifetime value. Contains PII.
+    columns:
+      - name: CUSTOMER_ID
+        data_tests: [unique, not_null]
+      - name: EMAIL
+        description: PII - masked in P7.
+      - name: PHONE
+        description: PII - masked in P7.
+
+  - name: dim_zone
+    description: The 12 Pune delivery zones (H3 res-8 cells grouped by neighbourhood).
+    columns:
+      - name: ZONE_ID
+        data_tests: [unique, not_null]
+
+  - name: dim_driver
+    columns:
+      - name: DRIVER_ID
+        data_tests: [unique, not_null]
+
+  - name: dim_date
+    columns:
+      - name: DATE_DAY
+        data_tests: [unique, not_null]
+
+  - name: mart_daily_kpis
+    description: Daily KPIs per zone (IST). GMV = delivered orders' totals; AOV = GMV / delivered orders.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [DATE_DAY, ZONE_ID]
+
+  - name: mart_cohort_retention
+    description: Monthly cohorts by first-order month; retention % per months since first order.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [COHORT_MONTH, MONTHS_SINCE_FIRST_ORDER]
+
+  - name: mart_restaurant_daily
+    description: Per restaurant and IST day - prep time vs estimate, rejects, cancellations.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [DATE_DAY, RESTAURANT_ID]

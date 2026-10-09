@@ -1,0 +1,38 @@
+name: fooddel
+version: "1.0.0"
+config-version: 2
+profile: fooddel
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+snapshot-paths: ["snapshots"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+target-path: target
+clean-targets: [target, dbt_packages]
+
+vars:
+  # fct_orders re-merges orders whose latest event was emitted within this window. Late events
+  # in the simulator arrive up to 6 h late, so 24 h covers them with margin.
+  incremental_lookback_hours: 24
+
+models:
+  fooddel:
+    +query_tag: dbt
+    staging:
+      +schema: STAGING
+      +materialized: view
+    intermediate:
+      +schema: STAGING
+      +materialized: table
+    marts:
+      +schema: MARTS
+      +materialized: table
+
+seeds:
+  fooddel:
+    +schema: MARTS
+
+snapshots:
+  fooddel:
+    +schema: STAGING

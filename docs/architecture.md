@@ -25,7 +25,8 @@ flowchart LR
 | P1 | done | simulator, Makefile, tests |
 | P2 | done, verified end-to-end | topics, Schema Registry (Avro), Kafka Connect + Snowflake sink v4, BRONZE DDL, RBAC, backfill COPY |
 | P3 | done, reconciled 37/37 | SILVER Dynamic Tables (dedup, typing, order lifecycle), GOLD Dynamic Tables (demand/supply + surge, SLA breaches, restaurant perf, H3 hex demand), at-risk view |
-| P4-P8 | planned | see CLAUDE.md |
+| P4 | done, reconciled 35/35 | dbt star schema on SILVER: fct_orders (incremental), SCD2 dim_restaurant, dim_customer/zone/driver/date, daily KPIs, cohort retention, restaurant daily |
+| P5-P8 | planned | see CLAUDE.md |
 
 ## Local stack (`make up`)
 
@@ -71,7 +72,33 @@ flowchart LR
 | SILVER.REFERENCE_EVENTS | 10 minutes (no consumers until P4) | INCREMENTAL |
 | GOLD | 10 minutes (`make dt-demo` -> 1 minute) | INCREMENTAL |
 
+## dbt historical layer (P4)
+
+```mermaid
+flowchart LR
+    SO[SILVER.ORDERS] --> STO[stg_orders]
+    SR[SILVER.REFERENCE_EVENTS] --> STR[stg_restaurant_changes]
+    SR --> STC[stg_customers]
+    STR --> IRV[int_restaurant_versions<br/>event-sourced SCD2]
+    IRV --> DR[dim_restaurant]
+    IRV --> IRC[int_restaurant_current] --> SNAP[snap_restaurants<br/>dbt snapshot]
+    STO --> ICF[int_customer_first_order]
+    STC --> DC[dim_customer]
+    ICF --> DC
+    STO --> DD[dim_driver]
+    SEED[seeds: zones, zone_cells] --> DZ[dim_zone]
+    STO --> F[fct_orders<br/>incremental merge]
+    DR -- point-in-time --> F
+    F --> K[mart_daily_kpis]
+    F --> CR[mart_cohort_retention]
+    DC --> CR
+    F --> RD[mart_restaurant_daily]
+```
+
+Schemas: `STAGING` (stg/int views+tables, snapshot; not visible to BI), `MARTS` (dims, fact, marts, seeds).
+
 ## Design rationale
 - [ADR 0001: simulator](decisions/0001-simulator-design.md)
 - [ADR 0002: Kafka, Schema Registry, Snowflake ingestion](decisions/0002-kafka-schema-registry-snowflake-ingestion.md)
 - [ADR 0003: SILVER/GOLD Dynamic Tables](decisions/0003-dynamic-tables-silver-gold.md)
+- [ADR 0004: dbt historical layer](decisions/0004-dbt-historical-layer.md)
