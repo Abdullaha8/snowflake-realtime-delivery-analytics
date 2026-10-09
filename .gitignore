@@ -20,3 +20,6 @@ Thumbs.db
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# private keys (make sf-keygen)
+secrets/

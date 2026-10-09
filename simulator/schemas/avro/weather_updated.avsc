@@ -1,0 +1,71 @@
+{
+  "type": "record",
+  "name": "WeatherUpdated",
+  "namespace": "com.fooddel.events",
+  "doc": "WEATHER_UPDATED on topic fooddel.reference.v1 (key: city)",
+  "fields": [
+    {
+      "name": "event_id",
+      "type": "string"
+    },
+    {
+      "name": "event_type",
+      "type": "string"
+    },
+    {
+      "name": "schema_version",
+      "type": "long"
+    },
+    {
+      "name": "event_ts",
+      "type": "string",
+      "doc": "when it happened (ISO-8601 UTC)"
+    },
+    {
+      "name": "emitted_ts",
+      "type": "string",
+      "doc": "when it was sent (ISO-8601 UTC)"
+    },
+    {
+      "name": "source",
+      "type": "string"
+    },
+    {
+      "name": "data",
+      "type": {
+        "type": "record",
+        "name": "WeatherUpdatedData",
+        "fields": [
+          {
+            "name": "city",
+            "type": "string"
+          },
+          {
+            "name": "condition",
+            "type": "string"
+          },
+          {
+            "name": "intensity",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "demand_multiplier",
+            "type": "double"
+          },
+          {
+            "name": "supply_multiplier",
+            "type": "double"
+          },
+          {
+            "name": "travel_time_multiplier",
+            "type": "double"
+          }
+        ]
+      }
+    }
+  ]
+}

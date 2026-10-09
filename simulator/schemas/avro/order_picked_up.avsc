@@ -1,0 +1,59 @@
+{
+  "type": "record",
+  "name": "OrderPickedUp",
+  "namespace": "com.fooddel.events",
+  "doc": "ORDER_PICKED_UP on topic fooddel.orders.v1 (key: order_id)",
+  "fields": [
+    {
+      "name": "event_id",
+      "type": "string"
+    },
+    {
+      "name": "event_type",
+      "type": "string"
+    },
+    {
+      "name": "schema_version",
+      "type": "long"
+    },
+    {
+      "name": "event_ts",
+      "type": "string",
+      "doc": "when it happened (ISO-8601 UTC)"
+    },
+    {
+      "name": "emitted_ts",
+      "type": "string",
+      "doc": "when it was sent (ISO-8601 UTC)"
+    },
+    {
+      "name": "source",
+      "type": "string"
+    },
+    {
+      "name": "data",
+      "type": {
+        "type": "record",
+        "name": "OrderPickedUpData",
+        "fields": [
+          {
+            "name": "order_id",
+            "type": "string"
+          },
+          {
+            "name": "driver_id",
+            "type": "string"
+          },
+          {
+            "name": "lat",
+            "type": "double"
+          },
+          {
+            "name": "lng",
+            "type": "double"
+          }
+        ]
+      }
+    }
+  ]
+}

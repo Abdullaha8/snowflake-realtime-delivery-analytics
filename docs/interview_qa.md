@@ -38,3 +38,48 @@ close.
 A fixed `world_seed` keeps restaurants, customers and drivers the same in every run. A run
 `seed` controls traffic. No set iteration happens anywhere, so the same seed gives
 byte-identical output even across Python hash seeds; a test checks this.
+
+## P2: Kafka → Snowflake BRONZE
+
+**Why connector v4 / Snowpipe Streaming instead of Snowpipe on S3 files?**
+Streaming gives rows in about 5–10 s instead of minutes. It's billed per GB, with no warehouse
+and no file sizing to tune. v4 is Snowflake's recommended version for new builds; v3 is being
+retired.
+
+**Why Avro and not JSON?**
+The v4 docs support schema-registry data only through the Avro converter. Avro also gives
+compact messages and an enforced contract. I keep timestamps and enums as strings, so the
+decoded record is byte-for-byte the same JSON as my backfill files. That means BRONZE looks the
+same however a row arrived.
+
+**How do several event types share one topic with Avro?**
+TopicRecordNameStrategy: each event type is its own record with its own subject and its own
+compatibility history. A union per topic would turn into an ugly `Union` struct in Snowflake.
+
+**What does BACKWARD compatibility mean here?**
+Consumers using the new schema must be able to read old data. So I can add an optional field
+with a default, but adding a required field is rejected. I have integration tests for both
+cases. The producer can't auto-register schemas, so an unreviewed schema change fails at the
+producer instead of reaching Snowflake.
+
+**How do you prove nothing was lost between Kafka and Snowflake?**
+Every BRONZE row carries its Kafka topic, partition and offset. For each partition, offsets
+must be contiguous (`max - min + 1 = count distinct`) and must match Kafka's end offset.
+Duplicates are expected at ~2%, because I injected them, and SILVER removes them by `event_id`.
+
+**Why keep duplicates in BRONZE?**
+BRONZE is a faithful, replayable record of what arrived. Dedup is business logic: which copy
+wins, and how late is too late. That belongs in SILVER, where it's versioned and testable.
+
+**How is the connector's private key protected?**
+- It never lives in git, in the connector JSON, or in Connect's config topic.
+- Kafka Connect's `EnvVarConfigProvider` resolves `${env:...}` inside the worker at runtime.
+- The Snowflake user is `TYPE=SERVICE` with key-pair auth only.
+- Its role can only INSERT into BRONZE (plus CREATE PIPE, which the docs require for the
+  default pipe).
+
+**How do you control cost?**
+- XSMALL warehouses with 60 s auto-suspend, created suspended.
+- Resource monitors per warehouse and for the account. These don't cover serverless
+  ingestion, which is per GB and tiny for this volume.
+- The connector is never auto-started, and `make stop` tears everything down.

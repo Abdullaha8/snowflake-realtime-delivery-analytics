@@ -48,10 +48,10 @@ docs/           architecture.md (Mermaid), decisions/ (ADRs), interview_qa.md
 - Prefer simple, explainable solutions over clever ones.
 
 ## Commands
-make up        # start Kafka + Airflow
+make up        # start Kafka, Schema Registry, Connect (+ Airflow from P5)
 make sim       # run simulator
 make dbt       # dbt build
-make test      # pytest + dbt test + sqlfluff
+make test      # lint + sqlfluff + pytest (+ dbt test from P4); make test-integration needs `make up`
 make stop      # stop containers + suspend warehouses
 
 ## Phases
@@ -66,9 +66,13 @@ P8 Streamlit dashboards, Terraform, GitHub Actions, final README, resume bullets
 
 ## Current status
 <!-- Claude updates this after each phase -->
-- [x] P1 (2026-10-10): simulator + 42 tests passing, Makefile, Kafka docker-compose (not yet run: Docker not installed), ADR 0001
-  - Topics: `fooddel.orders.v1` (key order_id), `fooddel.driver_locations.v1` (key driver_id), `fooddel.reference.v1` (key entity id). Schemas in `simulator/schemas/`.
+- [x] P1 (2026-10-10): simulator, Makefile, tests, ADR 0001. Kafka path verified (7,715 produced = 7,715 in topics).
   - Chaos ground truth: `<out>/_manifest/<run_id>.jsonl` (jsonl sink) or `data/manifests/` (stdout/kafka).
-  - Env notes: Windows, `.venv` = Python 3.11, GNU make via winget (ezwinports.make). Makefile recipes must stay single commands (they run under cmd.exe from PowerShell).
-  - Carry-overs to P2: install Docker Desktop and verify `make up` + `make sim SINK=kafka`; disable topic auto-create; `make stop` must also suspend warehouses.
-- [ ] P2
+  - Env notes: Windows, `.venv` = Python 3.11, GNU make via winget (ezwinports.make), Docker Desktop. Makefile recipes must stay single commands (cmd.exe from PowerShell). In Git Bash, prefix `docker exec` with `MSYS_NO_PATHCONV=1`.
+- [~] P2 (2026-10-10): local side done and verified; Snowflake side written, NOT yet run (needs user's account + .env)
+  - Stack: Confluent 7.8.2 (KRaft broker, Schema Registry, Connect) + Snowflake connector v4 **4.1.0** (pinned; 4.2.x < 2 weeks old at the time). Auto-create OFF; topics from `infra/kafka/create_topics.sh` (+ `fooddel.dlq.v1`).
+  - Contract: Avro generated from pydantic (`simulator/avro.py`), TopicRecordNameStrategy, BACKWARD, producer auto-register OFF. `make schemas` + `make schemas-register`.
+  - BRONZE: `ORDERS_RAW`, `DRIVER_LOCATIONS_RAW`, `REFERENCE_RAW` (RECORD_METADATA/RECORD_CONTENT VARIANT, change tracking on), pre-created; schematization off. Backfill rows have `RECORD_METADATA:source = 'backfill'`.
+  - Roles: FOODDEL_INGEST (connector), FOODDEL_TRANSFORM, FOODDEL_BI; user SVC_KAFKA_CONNECTOR (TYPE=SERVICE, key-pair). Resource monitors 5 cr/warehouse, 20 account.
+  - TODO before closing P2: user runs `make sf-keygen` → ALTER USER in Snowsight → fill .env → `make sf-setup` → `make up` → `make connector-up` → `make sim SINK=kafka` → `make sf-verify` (expect offset gaps = 0) → optional `make load-backfill` → `make stop`.
+- [ ] P3

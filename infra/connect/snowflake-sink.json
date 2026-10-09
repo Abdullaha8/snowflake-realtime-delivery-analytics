@@ -1,0 +1,26 @@
+{
+  "connector.class": "com.snowflake.kafka.connector.SnowflakeStreamingSinkConnector",
+  "tasks.max": "3",
+  "topics": "fooddel.orders.v1,fooddel.driver_locations.v1,fooddel.reference.v1",
+  "snowflake.topic2table.map": "fooddel.orders.v1:ORDERS_RAW,fooddel.driver_locations.v1:DRIVER_LOCATIONS_RAW,fooddel.reference.v1:REFERENCE_RAW",
+
+  "snowflake.url.name": "${env:SNOWFLAKE_ACCOUNT_URL}",
+  "snowflake.user.name": "${env:SNOWFLAKE_CONNECTOR_USER}",
+  "snowflake.private.key": "${env:SNOWFLAKE_CONNECTOR_PRIVATE_KEY}",
+  "snowflake.role.name": "FOODDEL_INGEST",
+  "snowflake.database.name": "${env:SNOWFLAKE_DATABASE}",
+  "snowflake.schema.name": "BRONZE",
+
+  "snowflake.enable.schematization": "false",
+  "snowflake.autocreate.table.type": "none",
+
+  "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "value.converter": "io.confluent.connect.avro.AvroConverter",
+  "value.converter.schema.registry.url": "http://schema-registry:8081",
+
+  "errors.tolerance": "all",
+  "errors.log.enable": "true",
+  "errors.deadletterqueue.topic.name": "fooddel.dlq.v1",
+  "errors.deadletterqueue.topic.replication.factor": "1",
+  "errors.deadletterqueue.context.headers.enable": "true"
+}

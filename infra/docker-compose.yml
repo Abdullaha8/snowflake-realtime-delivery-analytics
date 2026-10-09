@@ -1,14 +1,17 @@
-# Local Kafka for development: single-node KRaft (no ZooKeeper) + kafka-ui.
-# Host clients use localhost:9092; containers (kafka-ui, Kafka Connect in P2) use kafka:19092.
+# Local streaming stack: Kafka (KRaft, no ZooKeeper) + Schema Registry + Kafka Connect
+# (Snowflake sink) + kafka-ui. All Confluent 7.8.2 so broker and Connect versions match.
+# Host clients: Kafka localhost:9092, Schema Registry localhost:8081, Connect REST localhost:8083,
+# kafka-ui http://localhost:8080. Containers talk to Kafka on kafka:19092.
 name: fooddel
 
 services:
   kafka:
-    image: apache/kafka:3.9.0
+    image: confluentinc/cp-kafka:7.8.2
     container_name: fooddel-kafka
     ports:
       - "9092:9092"
     environment:
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_LISTENERS: INTERNAL://:19092,EXTERNAL://:9092,CONTROLLER://:9093
@@ -17,23 +20,96 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_NUM_PARTITIONS: 3
-      # P1 convenience only; P2 disables this and creates topics explicitly.
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_LOG_RETENTION_HOURS: 24
+      # Topics are created explicitly by kafka-init; a typo'd topic name should fail, not appear.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1"]
       interval: 10s
       timeout: 10s
-      retries: 10
+      retries: 12
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.8.2
+    container_name: fooddel-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./kafka/create_topics.sh:/create_topics.sh:ro
+    entrypoint: ["bash", "/create_topics.sh"]
+    restart: "no"
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.8.2
+    container_name: fooddel-schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:19092
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+      SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: backward
+      SCHEMA_REGISTRY_HEAP_OPTS: -Xms128m -Xmx256m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8081/subjects > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  connect:
+    build: ./connect
+    image: fooddel/kafka-connect-snowflake:4.1.0
+    container_name: fooddel-connect
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    # Snowflake connection settings + the connector's private key come from ../.env and are
+    # resolved inside the worker via ${env:...} (EnvVarConfigProvider) - never stored in the
+    # connector config, the Connect config topic, or git.
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:19092
+      CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      CONNECT_GROUP_ID: fooddel-connect
+      CONNECT_CONFIG_STORAGE_TOPIC: _connect-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: _connect-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: _connect-status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+      CONNECT_CONFIG_PROVIDERS: env
+      CONNECT_CONFIG_PROVIDERS_ENV_CLASS: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+      CONNECT_LOG4J_LOGGERS: org.reflections=ERROR
+      # The v4 connector's ingest SDK buffers off-heap: keep the heap ~50% of the container.
+      KAFKA_HEAP_OPTS: -Xms512m -Xmx1g
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8083/connector-plugins > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
 
   kafka-ui:
     image: provectuslabs/kafka-ui:v0.7.2
@@ -46,6 +122,9 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:19092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: connect
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://connect:8083
 
 volumes:
   kafka-data:

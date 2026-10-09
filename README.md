@@ -8,26 +8,46 @@ Tables + dbt → Snowpark ML → Streamlit. See [docs/architecture.md](docs/arch
 
 | Phase | | |
 |---|---|---|
-| P1 | ✅ | Repo scaffold, Makefile, Kafka docker-compose, event simulator + tests |
-| P2–P8 | ⏳ | Ingestion, Dynamic Tables, dbt, Airflow, ML, governance, dashboards |
+| P1 | ✅ | Repo scaffold, Makefile, event simulator + tests |
+| P2 | 🟡 | (local stack verified; Snowflake side awaits first run) Kafka topics, Schema Registry (Avro), Kafka Connect + Snowflake sink v4 → BRONZE, backfill COPY |
+| P3–P8 | ⏳ | Dynamic Tables, dbt, Airflow, ML, governance, dashboards |
 
 ## Quick start
 
-Requirements: Python 3.11, GNU make (Windows: `winget install ezwinports.make`), and Docker
-Desktop (only for Kafka).
+Requirements: Python 3.11, GNU make (Windows: `winget install ezwinports.make`), Docker Desktop.
 
 ```bash
 make install        # .venv + dependencies
-make test           # ruff + black --check + pytest
+make test           # ruff + black + sqlfluff + unit tests
 make sim-sample     # 3 simulated hours of Friday dinner rush -> data/sample, then a report
-make sim SPEED=60 DURATION=60 ARGS="--start 2026-10-09T20:00"   # live to stdout, 1 sim-hour/min
 make sim-backfill   # history since launch (2026-07-01) -> data/backfill/*.jsonl.gz
+```
 
-# with Kafka
+### Local streaming (no Snowflake needed)
+
+```bash
 cp .env.example .env
-make up             # Kafka on localhost:9092, kafka-ui on http://localhost:8080
-make sim SINK=kafka DURATION=300
-make stop           # always stop when done
+make up                 # Kafka, Schema Registry, Kafka Connect, kafka-ui (http://localhost:8080)
+make schemas-register   # 11 Avro subjects, BACKWARD compatibility
+make sim SINK=kafka SPEED=60 DURATION=60
+make topics             # messages per topic-partition
+make test-integration   # topics, contract gate, Avro round trip, connector plugin
+make stop               # always stop when done
+```
+
+### Snowflake ingestion (one-time setup, then per session)
+
+```bash
+make sf-keygen          # key pairs in secrets/ (gitignored); prints the ALTER USER + .env lines
+#  -> run the printed ALTER USER in Snowsight, fill .env (account, user, keys)
+make sf-setup           # 01_setup, 02_rbac, 03_bronze: DB, schemas, warehouses, monitors, roles, BRONZE
+make up                 # restart so Connect picks up the Snowflake settings from .env
+make connector-up       # starts Snowpipe Streaming ingestion (billed per GB)
+make sim SINK=kafka SPEED=60 DURATION=120
+make connector-status   # RUNNING, 3 tasks
+make sf-verify          # row counts, offset gaps, latency, sample row
+make load-backfill      # optional: ~100 days of history into BRONZE via stage + COPY
+make stop               # delete connector, stop containers, suspend warehouses
 ```
 
 ## The simulator
@@ -54,14 +74,16 @@ python -m simulator report <dir>    # volumes, KPIs, observed vs injected chaos
 python -m simulator schemas         # regenerate JSON Schemas
 ```
 
-Design rationale: [ADR 0001](docs/decisions/0001-simulator-design.md).
+Design rationale: [ADR 0001](docs/decisions/0001-simulator-design.md), [ADR 0002](docs/decisions/0002-kafka-schema-registry-snowflake-ingestion.md).
 
 ## Repo layout
 
 ```
 simulator/      event generator (zones, demand, entities, engine, chaos, sinks, report)
-infra/          docker-compose (Kafka + kafka-ui); terraform/ later
-snowflake/ dbt/ airflow/ ml/ streamlit/   later phases
+infra/          docker-compose (Kafka, Schema Registry, Connect, kafka-ui), topic script, connector config
+snowflake/      numbered, idempotent SQL: 01_setup, 02_rbac, 03_bronze, 04_backfill_copy, 90_verify_bronze
+scripts/        sf.py (Snowflake runner, key-pair auth), connect.py (Kafka Connect REST)
+dbt/ airflow/ ml/ streamlit/   later phases
 docs/           architecture, ADRs, interview Q&A
 tests/          pytest
 ```

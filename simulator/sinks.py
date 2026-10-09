@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import IO, Any, Protocol
 
@@ -77,11 +78,55 @@ class JsonlSink:
         self._files.clear()
 
 
+Serializer = Callable[[OutEvent], bytes]
+
+
+def json_serializer(ev: OutEvent) -> bytes:
+    return dumps(ev.value).encode()
+
+
+def avro_serializer(registry_url: str) -> Serializer:
+    """Confluent wire format (magic byte + schema id + Avro body), one serializer per event
+    type. auto.register.schemas is OFF: an event whose schema is not already registered
+    (via `python -m simulator registry register`) fails here, before it reaches Kafka."""
+    from confluent_kafka.schema_registry import (
+        SchemaRegistryClient,
+        topic_record_subject_name_strategy,
+    )
+    from confluent_kafka.schema_registry.avro import AvroSerializer
+    from confluent_kafka.serialization import MessageField, SerializationContext
+
+    from simulator.avro import avro_schemas, schema_json
+
+    client = SchemaRegistryClient({"url": registry_url})
+    conf = {
+        "auto.register.schemas": False,
+        "use.latest.version": False,
+        "subject.name.strategy": topic_record_subject_name_strategy,
+    }
+    serializers = {
+        et: AvroSerializer(client, schema_json(schema), conf=conf)
+        for et, schema in avro_schemas().items()
+    }
+
+    def serialize(ev: OutEvent) -> bytes:
+        ctx = SerializationContext(ev.topic, MessageField.VALUE)
+        return serializers[ev.value["event_type"]](ev.value, ctx)
+
+    return serialize
+
+
 class KafkaSink:
     """confluent-kafka producer. Idempotent producer + acks=all: the broker will not create
-    duplicates on retry, so every duplicate downstream is one the simulator injected."""
+    duplicates on retry, so every duplicate downstream is one the simulator injected.
+    Keys are plain UTF-8 strings (order_id / driver_id / entity id)."""
 
-    def __init__(self, bootstrap_servers: str, producer: Any | None = None) -> None:
+    def __init__(
+        self,
+        bootstrap_servers: str,
+        serializer: Serializer = json_serializer,
+        producer: Any | None = None,
+    ) -> None:
         if producer is None:
             from confluent_kafka import Producer  # imported lazily: optional dependency
 
@@ -96,6 +141,7 @@ class KafkaSink:
                 }
             )
         self.producer = producer
+        self.serializer = serializer
         self.errors: list[str] = []
         self.delivered = 0
 
@@ -109,7 +155,7 @@ class KafkaSink:
         kwargs = {
             "topic": ev.topic,
             "key": ev.key.encode(),
-            "value": dumps(ev.value).encode(),
+            "value": self.serializer(ev),
             "on_delivery": self._on_delivery,
         }
         try:

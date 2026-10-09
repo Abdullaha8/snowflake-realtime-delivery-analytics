@@ -1,4 +1,4 @@
-"""CLI: python -m simulator {run,report,schemas} ..."""
+"""CLI: python -m simulator {run,report,schemas,registry} ..."""
 
 from __future__ import annotations
 
@@ -13,8 +13,9 @@ from pathlib import Path
 from simulator.chaos import ChaosConfig
 from simulator.config import SimConfig
 from simulator.engine import Simulator, make_run_id
+from simulator.registry import DEFAULT_URL
 from simulator.report import report_dir
-from simulator.sinks import JsonlSink, KafkaSink, ManifestWriter, StdoutSink
+from simulator.sinks import JsonlSink, KafkaSink, ManifestWriter, StdoutSink, avro_serializer
 
 
 def _run(args: argparse.Namespace) -> int:
@@ -40,11 +41,13 @@ def _run(args: argparse.Namespace) -> int:
         sink = JsonlSink(out, run_id, compress=args.gzip)
         manifest_path = out / "_manifest" / f"{run_id}.jsonl"
     else:
-        sink = (
-            StdoutSink()
-            if args.sink == "stdout"
-            else KafkaSink(os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"))
-        )
+        if args.sink == "stdout":
+            sink = StdoutSink()
+        else:
+            sink = KafkaSink(
+                os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+                serializer=avro_serializer(os.environ.get("SCHEMA_REGISTRY_URL", DEFAULT_URL)),
+            )
         manifest_path = Path("data/manifests") / f"{run_id}.jsonl"
     sim = Simulator(cfg, sink, run_id=run_id, manifest=ManifestWriter(manifest_path))
 
@@ -73,13 +76,32 @@ def _report(args: argparse.Namespace) -> int:
 
 
 def _schemas(args: argparse.Namespace) -> int:
+    from simulator.avro import write_avro_schemas
     from simulator.events import json_schemas
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     for event_type, schema in json_schemas().items():
         (out / f"{event_type.lower()}.schema.json").write_text(json.dumps(schema, indent=2) + "\n")
-    print(f"wrote {len(json_schemas())} schemas to {out}")
+    avsc = write_avro_schemas(out / "avro")
+    print(f"wrote {len(json_schemas())} JSON Schemas and {len(avsc)} .avsc files to {out}")
+    return 0
+
+
+def _registry(args: argparse.Namespace) -> int:
+    from simulator import registry
+
+    if args.action == "register":
+        for subj, schema_id in registry.register_all(args.url).items():
+            print(f"  id={schema_id:<4} {subj}  ({registry.COMPATIBILITY})")
+        return 0
+    if args.action == "check":
+        results = registry.check_all(args.url)
+        for subj, ok in results.items():
+            print(f"  {'OK  ' if ok else 'FAIL'}  {subj}")
+        return 0 if all(results.values()) else 1
+    for subj in registry.list_subjects(args.url):
+        print(f"  {subj}")
     return 0
 
 
@@ -114,9 +136,14 @@ def main(argv: list[str] | None = None) -> int:
     rep.add_argument("path")
     rep.set_defaults(func=_report)
 
-    sch = sub.add_parser("schemas", help="export JSON Schemas")
+    sch = sub.add_parser("schemas", help="export JSON Schemas and Avro schemas")
     sch.add_argument("--out", default="simulator/schemas")
     sch.set_defaults(func=_schemas)
+
+    reg = sub.add_parser("registry", help="Schema Registry: register / check / list")
+    reg.add_argument("action", choices=["register", "check", "list"])
+    reg.add_argument("--url", default=DEFAULT_URL)
+    reg.set_defaults(func=_registry)
 
     args = p.parse_args(argv)
     return args.func(args)
