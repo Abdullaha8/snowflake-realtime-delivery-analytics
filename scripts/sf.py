@@ -9,6 +9,7 @@ python scripts/sf.py verify-dt              run snowflake/91_verify_dt.sql and p
 python scripts/sf.py dt status|suspend|resume|refresh
 python scripts/sf.py dt lag '1 minute'      set GOLD target lag (SILVER stays DOWNSTREAM)
 python scripts/sf.py reset-bronze           DEV only: truncate the BRONZE tables
+python scripts/sf.py alerts setup|resume|suspend|status
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ def keygen() -> int:
 
     SECRETS.mkdir(exist_ok=True)
     bodies = {}
-    for name in ("admin", "connector"):
+    for name in ("admin", "connector", "airflow"):
         priv_path = SECRETS / f"{name}_rsa_key.p8"
         if priv_path.exists():
             print(f"keeping existing {priv_path.relative_to(ROOT)}")
@@ -64,6 +65,8 @@ def keygen() -> int:
     print("   SNOWFLAKE_ADMIN_PRIVATE_KEY_PATH=secrets/admin_rsa_key.p8")
     print(f"   SNOWFLAKE_CONNECTOR_PUBLIC_KEY={bodies['connector'][0]}")
     print(f"   SNOWFLAKE_CONNECTOR_PRIVATE_KEY={bodies['connector'][1]}")
+    print("   SNOWFLAKE_AIRFLOW_USER=SVC_AIRFLOW")
+    print(f"   SNOWFLAKE_AIRFLOW_PUBLIC_KEY={bodies['airflow'][0]}")
     return 0
 
 
@@ -223,6 +226,38 @@ def dt(action: str, arg: str | None = None) -> int:
     return 0
 
 
+ALERTS = ("ALERT_DQ_FAILED", "ALERT_SLA_SPIKE", "ALERT_INGEST_LATENCY")
+
+
+def alerts(action: str) -> int:
+    from snowflake.connector.errors import ProgrammingError
+
+    db = os.environ.get("SNOWFLAKE_DATABASE", "FOODDEL_DEV")
+    if action == "setup":
+        files = ["08a_raise_alert.sql", "08_alerts.sql"]
+        if os.environ.get("SNOWFLAKE_ALERT_EMAIL"):
+            files.insert(0, "08b_alert_email.sql")
+        else:
+            print("SNOWFLAKE_ALERT_EMAIL not set: alerts will only write to OPS.ALERT_LOG")
+        return run_files([str(SQL_DIR / f) for f in files])
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("USE ROLE FOODDEL_TRANSFORM")
+        if action == "status":
+            cur.execute(f"SHOW ALERTS IN SCHEMA {db}.OPS")
+            names = [d[0] for d in cur.description]
+            for row in cur.fetchall():
+                d = dict(zip(names, row, strict=True))
+                print(f"  {d['name']:<22} {d['state']:<10} schedule={d['schedule']}")
+            return 0
+        for name in ALERTS:
+            try:
+                cur.execute(f"ALTER ALERT {db}.OPS.{name} {action.upper()}")
+                print(f"{name}: {action}")
+            except ProgrammingError as e:
+                print(f"{name}: {action} skipped ({e.msg[:80]})")
+    return 0
+
+
 def reset_bronze() -> int:
     db = os.environ.get("SNOWFLAKE_DATABASE", "")
     if not db.endswith("_DEV"):
@@ -257,6 +292,8 @@ def main(argv: list[str]) -> int:
         return dt(rest[0], rest[1] if len(rest) > 1 else None)
     if cmd == "reset-bronze":
         return reset_bronze()
+    if cmd == "alerts" and rest and rest[0] in ("setup", "resume", "suspend", "status"):
+        return alerts(rest[0])
     print(__doc__)
     return 2
 

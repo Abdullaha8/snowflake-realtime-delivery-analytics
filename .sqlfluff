@@ -10,6 +10,8 @@ param_style = dollar
 SNOWFLAKE_DATABASE = FOODDEL_DEV
 SNOWFLAKE_ADMIN_USER = ADMIN_USER
 SNOWFLAKE_CONNECTOR_PUBLIC_KEY = MIIBIjANBg
+SNOWFLAKE_AIRFLOW_PUBLIC_KEY = MIIBIjANBg
+SNOWFLAKE_ALERT_EMAIL = ops@example.com
 
 [sqlfluff:rules:capitalisation.keywords]
 capitalisation_policy = upper

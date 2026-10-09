@@ -12,11 +12,12 @@ Tables + dbt → Snowpark ML → Streamlit. See [docs/architecture.md](docs/arch
 | P2 | ✅ | Kafka topics, Schema Registry (Avro), Kafka Connect + Snowflake sink v4 → BRONZE, backfill COPY |
 | P3 | ✅ | SILVER/GOLD Dynamic Tables: dedup, order lifecycle, demand/supply + surge, SLA breaches, restaurant perf, H3 (reconciled 37/37 vs ground truth) |
 | P4 | ✅ | dbt star schema: incremental fct_orders, SCD2 restaurants (point-in-time), cohorts, daily KPIs; 58/58 dbt checks, 35/35 vs ground truth |
-| P5–P8 | ⏳ | Airflow, ML, governance, dashboards |
+| P5 | ✅ | Airflow 3 pipeline DAG, persisted data-quality checks, Snowflake Alerts, latency metric (p50 0.21 s producer→Snowflake) |
+| P6–P8 | ⏳ | ML, governance, dashboards |
 
 ## Quick start
 
-Requirements: Python 3.11, GNU make (Windows: `winget install ezwinports.make`), Docker Desktop.
+Requirements: Python 3.11, GNU make (Windows: `winget install ezwinports.make`), Docker Desktop, Astro CLI 1.45 (`winget install Astronomer.Astro --version 1.45.0`).
 
 ```bash
 make install        # .venv + dependencies
@@ -73,6 +74,18 @@ make reconcile-marts    # 35 metrics: MARTS vs Python ground truth from data/bac
 make dbt-docs && make dbt-docs-serve   # lineage + column docs on http://localhost:8001
 ```
 
+### Orchestration, data quality, alerts (P5)
+
+```bash
+make sf-keygen && make sf-setup && make sf-ops && make alerts-setup   # SVC_AIRFLOW, OPS, Alerts (suspended)
+make airflow-test       # DAG integrity tests inside the Astro image
+make airflow-up         # Airflow on http://localhost:8082 (airflow/.env holds only SVC_AIRFLOW's connection)
+make airflow-trigger    # one fooddel_pipeline run (skips if BRONZE has no new rows)
+#   force a run:  cd airflow && astro dev run dags trigger fooddel_pipeline --conf '{"force": true}'
+make alerts-resume      # demos only (serverless, every 10 min); make stop suspends them
+make stop               # also stops Airflow and suspends Alerts
+```
+
 ## The simulator
 
 - **Entities:**
@@ -97,7 +110,7 @@ python -m simulator report <dir>    # volumes, KPIs, observed vs injected chaos
 python -m simulator schemas         # regenerate JSON Schemas
 ```
 
-Design rationale: [ADR 0001](docs/decisions/0001-simulator-design.md), [ADR 0002](docs/decisions/0002-kafka-schema-registry-snowflake-ingestion.md), [ADR 0003](docs/decisions/0003-dynamic-tables-silver-gold.md), [ADR 0004](docs/decisions/0004-dbt-historical-layer.md).
+Design rationale: [ADR 0001](docs/decisions/0001-simulator-design.md), [ADR 0002](docs/decisions/0002-kafka-schema-registry-snowflake-ingestion.md), [ADR 0003](docs/decisions/0003-dynamic-tables-silver-gold.md), [ADR 0004](docs/decisions/0004-dbt-historical-layer.md), [ADR 0005](docs/decisions/0005-orchestration-dq-alerts-latency.md).
 
 ## Repo layout
 
@@ -107,7 +120,8 @@ infra/          docker-compose (Kafka, Schema Registry, Connect, kafka-ui), topi
 snowflake/      numbered, idempotent SQL: 01_setup, 02_rbac, 03_bronze, 04_backfill_copy, 05_silver, 06_gold, 90/91_verify
 scripts/        sf.py (Snowflake runner, DT ops), connect.py (Connect REST), reconcile*.py (ground-truth checks), gen_zone_seeds.py
 dbt/            dbt project: staging -> intermediate -> marts, SCD2 snapshot, seeds, tests
-airflow/ ml/ streamlit/   later phases
+airflow/        Astro project: fooddel_pipeline DAG, DQ checks, DAG integrity tests
+ml/ streamlit/  later phases
 docs/           architecture, ADRs, interview Q&A
 tests/          pytest
 ```

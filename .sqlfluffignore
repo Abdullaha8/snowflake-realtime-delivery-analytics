@@ -1,0 +1,2 @@
+# sqlfluff (snowflake dialect) cannot parse CREATE NOTIFICATION INTEGRATION
+snowflake/08b_alert_email.sql

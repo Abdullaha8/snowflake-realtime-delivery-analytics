@@ -166,3 +166,51 @@ exactly the new orders plus the lookback window. A backfill of *older* dates nee
 The IST month of a customer's first order, not the signup month. Retention in month N means
 at least one order N months after the cohort month. Using order activity avoids counting
 people who signed up and never ordered.
+
+## P5: Orchestration, data quality, alerts, latency
+
+**Walk me through your DAG.**
+`check_new_data → refresh_dynamic_tables → dbt_build → data_quality → record_latency →
+record_run`. The first task compares BRONZE's row count, read from metadata with `SHOW TABLES`
+(no warehouse), with the count at the last successful run. If nothing changed, the run
+short-circuits and an idle hour costs zero credits. A `force` parameter covers recovery runs,
+because a count can't see a fix that deletes rows.
+
+**Why doesn't the data-quality task retry?**
+Retries are for transient problems like network blips or warehouse hiccups. Re-running the
+same checks on the same data gives the same answer, so the task fails fast with
+`AirflowFailException`. `record_run` uses `trigger_rule=all_done`, so even failed runs are
+recorded in `OPS.PIPELINE_RUNS`.
+
+**How do you do data quality, and why store the results?**
+Seven SQL checks, four critical and three warnings, defined as plain data and unit-tested.
+Every result from every run goes to `OPS.DQ_RESULTS`. That gives trends for dashboards, an
+audit trail, and the input for a Snowflake Alert. I added a minimum sample size after a 13-row
+window produced a meaningless 7.7% duplicate warning.
+
+**How does alerting work?**
+- Three serverless Snowflake Alerts: a DQ failure, an SLA breach spike, ingest latency.
+- They're created suspended and resumed only for demos, because they bill per evaluation.
+- Each alert calls one procedure that logs to `OPS.ALERT_LOG` and emails if configured; an
+  email failure can't break the alert.
+- I proved it by injecting a "delivered without pickup" event: the DAG failed exactly at
+  `data_quality`, the alert triggered and logged, and a forced recovery run went green after I
+  removed the row.
+
+**What's your end-to-end latency?**
+At real-time speed, producer → Snowflake p50 is 0.21 s and p95 is 0.22 s, from Snowpipe
+Streaming's push timestamp. GOLD trailed real time by 29 s, against a 10-minute target lag. I
+exclude rows from accelerated simulations, whose timestamps are in simulated time, instead of
+letting them produce negative latencies.
+
+**How did you secure Airflow?**
+It has its own service user (key-pair, transform role). A script generates `airflow/.env` with
+only that connection, and only that one key file is mounted read-only. The Kafka connector's
+key and my personal key never enter the Airflow containers.
+
+**Airflow 3 gotchas you hit?**
+- Task code can't query the metadata DB, so I derive run status from XCom plus Snowflake.
+- `DagBag.get_dag()` hits the DB, so the tests use `dagbag.dags`.
+- Imports from `include/` are `include.fooddel...`, because Astro puts the project root on the
+  path.
+- Astro's reverse proxy took port 8080, so I pinned the API server to 8082 with `--no-proxy`.

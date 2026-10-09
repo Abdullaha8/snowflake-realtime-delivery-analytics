@@ -1,0 +1,1 @@
+# OS packages (apt) for the Astro image - none needed. The file must exist: the base image copies it.

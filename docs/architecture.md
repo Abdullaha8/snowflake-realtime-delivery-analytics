@@ -26,7 +26,8 @@ flowchart LR
 | P2 | done, verified end-to-end | topics, Schema Registry (Avro), Kafka Connect + Snowflake sink v4, BRONZE DDL, RBAC, backfill COPY |
 | P3 | done, reconciled 37/37 | SILVER Dynamic Tables (dedup, typing, order lifecycle), GOLD Dynamic Tables (demand/supply + surge, SLA breaches, restaurant perf, H3 hex demand), at-risk view |
 | P4 | done, reconciled 35/35 | dbt star schema on SILVER: fct_orders (incremental), SCD2 dim_restaurant, dim_customer/zone/driver/date, daily KPIs, cohort retention, restaurant daily |
-| P5-P8 | planned | see CLAUDE.md |
+| P5 | done | Airflow 3 DAG (skip-if-no-data, DT refresh, dbt, DQ, latency), OPS schema, 3 Snowflake Alerts, SVC_AIRFLOW |
+| P6-P8 | planned | see CLAUDE.md |
 
 ## Local stack (`make up`)
 
@@ -97,8 +98,35 @@ flowchart LR
 
 Schemas: `STAGING` (stg/int views+tables, snapshot; not visible to BI), `MARTS` (dims, fact, marts, seeds).
 
+## Orchestration, data quality, alerts (P5)
+
+```mermaid
+flowchart LR
+    subgraph Airflow["Airflow 3 (Astro) - fooddel_pipeline, hourly"]
+        C[check_new_data<br/>SHOW TABLES, no warehouse] --> R[refresh_dynamic_tables]
+        R --> D[dbt_build<br/>SVC_AIRFLOW]
+        D --> Q[data_quality<br/>no retries]
+        Q --> L[record_latency]
+        L --> P[record_run<br/>all_done]
+    end
+    Q --> DQ[(OPS.DQ_RESULTS)]
+    L --> LM[(OPS.LATENCY_METRICS)]
+    P --> PR[(OPS.PIPELINE_RUNS)]
+    DQ --> A1{{ALERT_DQ_FAILED}}
+    SO[SILVER.ORDERS] --> A2{{ALERT_SLA_SPIKE}}
+    VL[OPS.V_INGEST_LATENCY] --> A3{{ALERT_INGEST_LATENCY}}
+    A1 & A2 & A3 --> RA[OPS.RAISE_ALERT] --> AL[(OPS.ALERT_LOG)]
+    RA -. if email set .-> EM[email]
+```
+
+| Local UI | Port |
+|---|---|
+| Airflow | http://localhost:8082 |
+| kafka-ui | http://localhost:8080 |
+
 ## Design rationale
 - [ADR 0001: simulator](decisions/0001-simulator-design.md)
 - [ADR 0002: Kafka, Schema Registry, Snowflake ingestion](decisions/0002-kafka-schema-registry-snowflake-ingestion.md)
 - [ADR 0003: SILVER/GOLD Dynamic Tables](decisions/0003-dynamic-tables-silver-gold.md)
 - [ADR 0004: dbt historical layer](decisions/0004-dbt-historical-layer.md)
+- [ADR 0005: orchestration, data quality, alerts, latency](decisions/0005-orchestration-dq-alerts-latency.md)

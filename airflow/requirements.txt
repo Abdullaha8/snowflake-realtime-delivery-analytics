@@ -1,0 +1,2 @@
+# Pinned to a release at least two weeks old at the time (6.18.0 was too new).
+apache-airflow-providers-snowflake==6.17.0

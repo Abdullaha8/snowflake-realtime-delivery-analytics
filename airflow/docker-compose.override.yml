@@ -1,0 +1,7 @@
+# Tasks run in the scheduler container (LocalExecutor in `astro dev`). It gets the dbt project
+# and ONLY the Airflow service user's private key, read-only. No other secret is mounted.
+services:
+  scheduler:
+    volumes:
+      - ../dbt:/usr/local/airflow/dbt
+      - ../secrets/airflow_rsa_key.p8:/usr/local/airflow/secrets/airflow_rsa_key.p8:ro

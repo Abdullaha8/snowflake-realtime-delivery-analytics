@@ -13,6 +13,7 @@ endif
 export
 
 COMPOSE := docker compose -f infra/docker-compose.yml
+ASTRO ?= astro
 
 # make sim SINK=kafka DURATION=300 SPEED=60 ARGS="--force-rain"
 SINK ?= stdout
@@ -23,7 +24,7 @@ OUT ?= data/sim
 
 .PHONY: help install up build down stop topics schemas schemas-register schemas-check \
         connector-up connector-status connector-down sf-keygen sf-setup sf-verify sf-suspend \
-        load-backfill sf-reset-bronze dbt-deps dbt dbt-freshness dbt-docs dbt-docs-serve reconcile-marts seeds-gen sf-dt dt-status dt-refresh dt-demo dt-normal dt-suspend         dt-resume sf-verify-dt reconcile sim sim-sample sim-backfill sim-report lint format test test-integration clean
+        load-backfill sf-reset-bronze dbt-deps dbt dbt-freshness dbt-docs dbt-docs-serve reconcile-marts seeds-gen sf-ops alerts-setup alerts-resume alerts-suspend alerts-status airflow-env airflow-up airflow-down airflow-test airflow-trigger sf-dt dt-status dt-refresh dt-demo dt-normal dt-suspend         dt-resume sf-verify-dt reconcile sim sim-sample sim-backfill sim-report lint format test test-integration clean
 
 help:  ## list targets
 	@$(PY) -c "import re;[print(f'  {m[0]:<18}{m[1]}') for m in re.findall(r'^([a-z-]+):.*?## (.*)$$', open('Makefile').read(), re.M)]"
@@ -46,9 +47,11 @@ build:  ## rebuild the Kafka Connect image (after changing infra/connect/Dockerf
 down:  ## remove containers (keeps the Kafka volume)
 	$(COMPOSE) down
 
-stop:  ## delete connector, stop containers, suspend Dynamic Tables + warehouses
+stop:  ## stop everything: connector, Kafka stack, Airflow, Alerts, Dynamic Tables, warehouses
 	-$(PY) scripts/connect.py delete
 	-$(COMPOSE) stop
+	-cd airflow && $(ASTRO) dev stop
+	-$(PY) scripts/sf.py alerts suspend
 	-$(PY) scripts/sf.py dt suspend
 	-$(PY) scripts/sf.py suspend
 
@@ -146,6 +149,37 @@ reconcile-marts:  ## compare MARTS with the backfill's ground truth (data/backfi
 seeds-gen:  ## regenerate dbt zone seeds from the simulator zone map
 	$(PY) scripts/gen_zone_seeds.py
 
+# --- orchestration, data quality, alerts (P5) --------------------------------------------
+sf-ops:  ## create OPS tables/views (pipeline runs, DQ results, latency, alert log)
+	$(PY) scripts/sf.py run snowflake/07_ops.sql
+
+alerts-setup:  ## create RAISE_ALERT + 3 Alerts (suspended); email integration if SNOWFLAKE_ALERT_EMAIL set
+	$(PY) scripts/sf.py alerts setup
+
+alerts-resume:  ## start the Alerts (serverless, every 10 min - demos only)
+	$(PY) scripts/sf.py alerts resume
+
+alerts-suspend:  ## stop the Alerts
+	$(PY) scripts/sf.py alerts suspend
+
+alerts-status:  ## state + schedule of each Alert
+	$(PY) scripts/sf.py alerts status
+
+airflow-env:  ## write airflow/.env (SVC_AIRFLOW connection only) from .env
+	$(PY) scripts/gen_airflow_env.py
+
+airflow-up: airflow-env  ## start Airflow (Astro) - UI on http://localhost:8082 (admin/admin)
+	cd airflow && $(ASTRO) dev start --no-browser --no-proxy
+
+airflow-down:  ## stop Airflow containers
+	cd airflow && $(ASTRO) dev stop
+
+airflow-test:  ## DAG integrity tests inside the Astro image
+	cd airflow && $(ASTRO) dev pytest
+
+airflow-trigger:  ## trigger one fooddel_pipeline run now
+	cd airflow && $(ASTRO) dev run dags trigger fooddel_pipeline
+
 # --- simulator ---------------------------------------------------------------------------
 sim:  ## live simulator, auto-stops after DURATION wall seconds (SINK=stdout|jsonl|kafka)
 	$(PY) -m simulator run --mode live --sink $(SINK) --duration $(DURATION) --speed $(SPEED) --out $(OUT) $(ARGS)
@@ -162,13 +196,13 @@ sim-report:  ## summarise a jsonl run: make sim-report OUT=data/sample
 
 # --- quality -----------------------------------------------------------------------------
 lint:  ## ruff + black --check + sqlfluff
-	$(PY) -m ruff check simulator scripts tests
-	$(PY) -m black --check simulator scripts tests
+	$(PY) -m ruff check simulator scripts tests airflow/dags airflow/include airflow/tests
+	$(PY) -m black --check simulator scripts tests airflow/dags airflow/include airflow/tests
 	$(PY) -m sqlfluff lint snowflake
 
 format:  ## ruff --fix + black + sqlfluff fix
-	$(PY) -m ruff check --fix simulator scripts tests
-	$(PY) -m black simulator scripts tests
+	$(PY) -m ruff check --fix simulator scripts tests airflow/dags airflow/include airflow/tests
+	$(PY) -m black simulator scripts tests airflow/dags airflow/include airflow/tests
 	$(PY) -m sqlfluff fix snowflake -f
 
 # Offline only: `dbt parse` validates the dbt project without a warehouse. dbt's data tests

@@ -135,3 +135,42 @@ def test_dbt_zone_seeds_match_the_simulator_zone_map():
     for name, text in gen_zone_seeds.render().items():
         committed = (ROOT / "dbt" / "seeds" / name).read_text(encoding="utf-8")
         assert committed == text, f"dbt/seeds/{name} is stale: run python scripts/gen_zone_seeds.py"
+
+
+def test_dq_checks_evaluate_and_summarize():
+    sys.path.insert(0, str(ROOT / "airflow"))
+    from include.fooddel.dq_checks import CHECKS, evaluate, summarize
+
+    by_name = {c.name: c for c in CHECKS}
+    assert len(by_name) == len(CHECKS)
+    assert {c.severity for c in CHECKS} <= {"critical", "warn"}
+    assert all("{db}" in c.sql for c in CHECKS)
+    dup = by_name["silver_duplicate_event_ids"]
+    assert evaluate(dup, 0) == "PASS" and evaluate(dup, 3) == "FAIL"
+    assert evaluate(dup, None) == "PASS"  # empty window
+    late = by_name["late_event_pct_24h"]
+    assert evaluate(late, 9.9) == "PASS" and evaluate(late, 10.1) == "FAIL"
+    s = summarize(
+        [
+            {"check_name": "a", "severity": "critical", "status": "FAIL"},
+            {"check_name": "b", "severity": "warn", "status": "FAIL"},
+            {"check_name": "c", "severity": "critical", "status": "PASS"},
+        ]
+    )
+    assert s == {"critical_failures": ["a"], "warnings": ["b"]}
+
+
+def test_airflow_env_has_only_what_airflow_needs():
+    import gen_airflow_env
+
+    text = gen_airflow_env.render(
+        {
+            "SNOWFLAKE_ACCOUNT": "acc",
+            "SNOWFLAKE_DATABASE": "DB",
+            "SNOWFLAKE_AIRFLOW_USER": "SVC_AIRFLOW",
+        }
+    )
+    assert "AIRFLOW_CONN_SNOWFLAKE_DEFAULT=" in text
+    assert "PRIVATE_KEY=" not in text and "CONNECTOR" not in text and "ADMIN" not in text
+    conn = json.loads(text.split("AIRFLOW_CONN_SNOWFLAKE_DEFAULT=", 1)[1].splitlines()[0])
+    assert conn["login"] == "SVC_AIRFLOW" and conn["extra"]["role"] == "FOODDEL_TRANSFORM"
