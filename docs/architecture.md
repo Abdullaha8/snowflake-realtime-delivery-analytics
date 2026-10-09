@@ -23,7 +23,7 @@ flowchart LR
 | Phase | Status | Components |
 |---|---|---|
 | P1 | done | simulator, Makefile, tests |
-| P2 | done (Snowflake side awaiting first run) | topics, Schema Registry (Avro), Kafka Connect + Snowflake sink v4, BRONZE DDL, RBAC, backfill COPY |
+| P2 | done, verified end-to-end | topics, Schema Registry (Avro), Kafka Connect + Snowflake sink v4, BRONZE DDL, RBAC, backfill COPY |
 | P3-P8 | planned | see CLAUDE.md |
 
 ## Local stack (`make up`)

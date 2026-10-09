@@ -69,10 +69,11 @@ P8 Streamlit dashboards, Terraform, GitHub Actions, final README, resume bullets
 - [x] P1 (2026-10-10): simulator, Makefile, tests, ADR 0001. Kafka path verified (7,715 produced = 7,715 in topics).
   - Chaos ground truth: `<out>/_manifest/<run_id>.jsonl` (jsonl sink) or `data/manifests/` (stdout/kafka).
   - Env notes: Windows, `.venv` = Python 3.11, GNU make via winget (ezwinports.make), Docker Desktop. Makefile recipes must stay single commands (cmd.exe from PowerShell). In Git Bash, prefix `docker exec` with `MSYS_NO_PATHCONV=1`.
-- [~] P2 (2026-10-10): local side done and verified; Snowflake side written, NOT yet run (needs user's account + .env)
+- [x] P2 (2026-10-10): Kafka → Snowflake BRONZE verified end-to-end. ADR 0002.
   - Stack: Confluent 7.8.2 (KRaft broker, Schema Registry, Connect) + Snowflake connector v4 **4.1.0** (pinned; 4.2.x < 2 weeks old at the time). Auto-create OFF; topics from `infra/kafka/create_topics.sh` (+ `fooddel.dlq.v1`).
-  - Contract: Avro generated from pydantic (`simulator/avro.py`), TopicRecordNameStrategy, BACKWARD, producer auto-register OFF. `make schemas` + `make schemas-register`.
-  - BRONZE: `ORDERS_RAW`, `DRIVER_LOCATIONS_RAW`, `REFERENCE_RAW` (RECORD_METADATA/RECORD_CONTENT VARIANT, change tracking on), pre-created; schematization off. Backfill rows have `RECORD_METADATA:source = 'backfill'`.
-  - Roles: FOODDEL_INGEST (connector), FOODDEL_TRANSFORM, FOODDEL_BI; user SVC_KAFKA_CONNECTOR (TYPE=SERVICE, key-pair). Resource monitors 5 cr/warehouse, 20 account.
-  - TODO before closing P2: user runs `make sf-keygen` → ALTER USER in Snowsight → fill .env → `make sf-setup` → `make up` → `make connector-up` → `make sim SINK=kafka` → `make sf-verify` (expect offset gaps = 0) → optional `make load-backfill` → `make stop`.
+  - Contract: Avro generated from pydantic (`simulator/avro.py`), TopicRecordNameStrategy on producer AND Connect converter, BACKWARD, producer auto-register OFF. `make schemas` + `make schemas-register`.
+  - Connector config gotchas (fixed): `snowflake.streaming.validate.compatibility.with.classic=false`; `value.converter.value.subject.name.strategy=TopicRecordNameStrategy`. `make connector-status` shows DLQ depth (36,058 old failed records from the first run stay there until retention).
+  - BRONZE: `ORDERS_RAW`, `DRIVER_LOCATIONS_RAW`, `REFERENCE_RAW` (RECORD_METADATA/RECORD_CONTENT VARIANT, change tracking on). Default pipes `<TABLE>-STREAMING` auto-created. Backfill rows (if loaded) have `RECORD_METADATA:source = 'backfill'`; backfill NOT loaded yet.
+  - Results: BRONZE rows = Kafka messages per topic (56,173 / 1,587 / 4,944); offset GAPS = 0 on all 9 partitions; fresh run 3,896 emitted = 3,896 rows, 1.82% dups; Kafka→push p50 0.06 s. Current BRONZE has many cross-run duplicates (same seeds replayed in tests) – fine for P3 dedup.
+  - Roles: FOODDEL_INGEST (connector), FOODDEL_TRANSFORM, FOODDEL_BI; user SVC_KAFKA_CONNECTOR (TYPE=SERVICE, key-pair). Resource monitors 5 cr/warehouse, 20 account (~0.1 used).
 - [ ] P3

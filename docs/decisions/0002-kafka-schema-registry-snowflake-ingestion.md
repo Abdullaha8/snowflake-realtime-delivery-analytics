@@ -130,6 +130,12 @@ landing table, and the nested `data` payload doesn't flatten cleanly.
 - `make stop` deletes the connector, stops the containers and suspends the warehouses.
   `make up` never starts the connector by itself.
 
+## Measured results (2026-10-10)
+- BRONZE row count = Kafka message count for every topic (56,173 / 1,587 / 4,944).
+- Offsets are contiguous on all 9 topic-partitions (gaps = 0): no loss.
+- A fresh 60 s run: 3,896 emitted = 3,896 rows, 1.82% duplicate rows (2% injected).
+- Kafka append → connector push: p50 0.06 s, p95 0.07 s. Snowflake commit adds a few seconds.
+
 ## Trade-offs
 - **Avro vs JSON.** The cost is a generation step and a binary wire format: kafka-ui decodes it
   through the registry, but `kafka-console-consumer` won't. In return we get a supported

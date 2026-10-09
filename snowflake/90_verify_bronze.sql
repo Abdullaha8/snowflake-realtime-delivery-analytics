@@ -5,7 +5,9 @@ USE ROLE SYSADMIN;
 USE WAREHOUSE WH_INGEST;
 USE SCHEMA ${SNOWFLAKE_DATABASE}.BRONZE;
 
--- 1. Rows per table and source. duplicate_rows ~2% of Kafka rows is expected (injected).
+-- 1. Rows per table and source. For a single run, duplicate_rows ~2% is expected (injected).
+--    Re-running the simulator with the same --seed replays the same event_ids, which also
+--    shows up here as duplicates.
 WITH ALL_ROWS AS (
     SELECT
         'ORDERS_RAW' AS TABLE_NAME,
@@ -59,7 +61,21 @@ WHERE RECORD_METADATA:topic IS NOT NULL AND RECORD_METADATA:source IS NULL
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
--- 3. Freshness: producer emit -> Kafka append -> pushed by the connector (seconds).
+-- 3. Freshness: Kafka append -> pushed into the connector's ingest buffer (seconds), only for
+--    records produced after the connector started consuming (its first push). A backlog that
+--    sat in Kafka before deployment would otherwise dominate. Snowflake commit adds a few
+--    seconds on top.
+WITH RECENT AS (
+    SELECT O.RECORD_METADATA
+    FROM ORDERS_RAW AS O
+    WHERE
+        O.RECORD_METADATA:SnowflakeConnectorPushTime IS NOT NULL
+        AND O.RECORD_METADATA:CreateTime::NUMBER >= (
+            SELECT MIN(L.RECORD_METADATA:SnowflakeConnectorPushTime::NUMBER)
+            FROM ORDERS_RAW AS L
+        )
+)
+
 SELECT
     COUNT(*) AS KAFKA_ROWS,
     MEDIAN(
@@ -72,8 +88,7 @@ SELECT
         0.95
     ) AS P95_KAFKA_TO_PUSH_S,
     MAX(TO_TIMESTAMP_LTZ(RECORD_METADATA:SnowflakeConnectorPushTime::NUMBER, 3)) AS LAST_PUSH
-FROM ORDERS_RAW
-WHERE RECORD_METADATA:SnowflakeConnectorPushTime IS NOT NULL;
+FROM RECENT;
 
 -- 4. Event mix on the orders topic.
 SELECT

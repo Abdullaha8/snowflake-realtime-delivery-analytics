@@ -9,7 +9,7 @@ Tables + dbt → Snowpark ML → Streamlit. See [docs/architecture.md](docs/arch
 | Phase | | |
 |---|---|---|
 | P1 | ✅ | Repo scaffold, Makefile, event simulator + tests |
-| P2 | 🟡 | (local stack verified; Snowflake side awaits first run) Kafka topics, Schema Registry (Avro), Kafka Connect + Snowflake sink v4 → BRONZE, backfill COPY |
+| P2 | ✅ | Kafka topics, Schema Registry (Avro), Kafka Connect + Snowflake sink v4 → BRONZE, backfill COPY |
 | P3–P8 | ⏳ | Dynamic Tables, dbt, Airflow, ML, governance, dashboards |
 
 ## Quick start
