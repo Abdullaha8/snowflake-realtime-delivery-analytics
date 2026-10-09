@@ -50,6 +50,20 @@ validation, no `classic.offset.migration`). We aren't migrating, so it's set to 
   are painful to evolve. As a result, a record decoded by the AvroConverter produces the
   **same RECORD_CONTENT JSON** as a COPY-loaded JSONL line.
 
+**Gotcha (found on first Snowflake run):** the consumer side needs the same strategy. By
+default, Connect's `AvroConverter` looks up the schema version under `<topic>-value`, even though
+the message carries a schema id. Without
+`value.converter.value.subject.name.strategy=...TopicRecordNameStrategy`, every record failed
+with `Subject '<topic>-value' not found`. With `errors.tolerance=all`, all 36 k records went to
+the DLQ while the connector still showed RUNNING, and BRONZE stayed empty.
+
+Two guards now prevent a repeat:
+- An integration test deploys a throwaway FileStreamSink with exactly the Snowflake sink's
+  converter settings and `errors.tolerance=none`. It fails on the old config and passes on the
+  fixed one, without spending anything on Snowflake.
+- `make connector-status` reports the DLQ depth and its latest error, so "RUNNING" can no
+  longer hide a stream of rejected records.
+
 ### 3. The registry is a gate, not documentation
 - Compatibility is **BACKWARD** per subject: new readers must be able to read old data.
   - Adding an optional field with a default passes.

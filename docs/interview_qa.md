@@ -83,3 +83,13 @@ wins, and how late is too late. That belongs in SILVER, where it's versioned and
 - Resource monitors per warehouse and for the account. These don't cover serverless
   ingestion, which is per GB and tiny for this volume.
 - The connector is never auto-started, and `make stop` tears everything down.
+
+**Tell me about a bug you hit.**
+On the first Snowflake run, the connector said RUNNING but BRONZE had 0 rows. The producer
+registered schemas per record type (TopicRecordNameStrategy), but Connect's Avro converter
+defaults to per-topic subjects. Every record failed to deserialize, and because
+`errors.tolerance=all`, all 36 k records quietly went to the dead-letter queue. I fixed the
+converter config. Then I added a local integration test that runs the real converter settings
+through a file sink, which fails on the old config and passes on the new one. I also made the
+status command surface DLQ depth. The lesson: error tolerance without monitoring is data loss
+you don't see.

@@ -18,6 +18,7 @@
   "key.converter": "org.apache.kafka.connect.storage.StringConverter",
   "value.converter": "io.confluent.connect.avro.AvroConverter",
   "value.converter.schema.registry.url": "http://schema-registry:8081",
+  "value.converter.value.subject.name.strategy": "io.confluent.kafka.serializers.subject.TopicRecordNameStrategy",
 
   "errors.tolerance": "all",
   "errors.log.enable": "true",

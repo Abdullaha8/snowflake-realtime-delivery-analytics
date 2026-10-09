@@ -18,6 +18,7 @@ CONNECT_URL = os.environ.get("CONNECT_URL", "http://localhost:8083")
 NAME = "fooddel_snowflake_sink"
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "infra" / "connect" / "snowflake-sink.json"
 PLUGIN = "com.snowflake.kafka.connector.SnowflakeStreamingSinkConnector"
+DLQ_TOPIC = "fooddel.dlq.v1"
 # Resolved inside the Connect container from ../.env; checked here so a missing value fails fast.
 REQUIRED_ENV = [
     "SNOWFLAKE_ACCOUNT_URL",
@@ -75,7 +76,40 @@ def status() -> int:
     healthy = body["connector"]["state"] == "RUNNING" and all(
         t["state"] == "RUNNING" for t in body["tasks"]
     )
+    # errors.tolerance=all keeps the connector RUNNING while bad records go to the DLQ,
+    # so RUNNING alone does not mean data is landing.
+    depth, last_error = dlq_status()
+    print(f"dead-letter queue {DLQ_TOPIC}: {depth} record(s)")
+    if last_error:
+        print(f"  latest error: {last_error[:200]}")
     return 0 if healthy else 1
+
+
+def dlq_status() -> tuple[int, str | None]:
+    """Record count in the DLQ and the error message of the newest record (if any)."""
+    try:
+        from confluent_kafka import Consumer, TopicPartition
+    except ImportError:
+        return 0, None
+    consumer = Consumer(
+        {
+            "bootstrap.servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+            "group.id": "fooddel-dlq-inspector",
+            "enable.auto.commit": False,
+        }
+    )
+    try:
+        tp = TopicPartition(DLQ_TOPIC, 0)
+        low, high = consumer.get_watermark_offsets(tp, timeout=10)
+        if high <= low:
+            return 0, None
+        consumer.assign([TopicPartition(DLQ_TOPIC, 0, high - 1)])
+        msg = consumer.poll(10)
+        headers = dict(msg.headers() or []) if msg is not None and not msg.error() else {}
+        error = headers.get("__connect.errors.exception.message")
+        return high - low, error.decode(errors="replace") if error else None
+    finally:
+        consumer.close()
 
 
 def simple(method: str, suffix: str) -> int:

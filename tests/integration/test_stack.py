@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import urllib.error
 import urllib.request
 import uuid
 
@@ -168,3 +169,75 @@ def test_connect_has_snowflake_plugin():
     plugins = _get(f"{CONNECT}/connector-plugins")
     classes = {p["class"]: p["version"] for p in plugins}
     assert "com.snowflake.kafka.connector.SnowflakeStreamingSinkConnector" in classes
+
+
+def _connect_call(method: str, path: str, body: dict | None = None) -> tuple[int, object]:
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(
+        f"{CONNECT}{path}", data=data, method=method, headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw = resp.read()
+            return resp.status, json.loads(raw) if raw else None
+    except urllib.error.HTTPError as e:
+        return e.code, None
+
+
+def test_connect_decodes_our_avro_with_the_snowflake_sink_converter_settings():
+    """Deploys a throwaway FileStreamSink that uses exactly the converter settings of
+    infra/connect/snowflake-sink.json (with errors.tolerance=none, so a decode failure fails
+    the task instead of hiding in the DLQ). Catches converter/registry mismatches locally,
+    before anything is spent on Snowflake."""
+    import subprocess
+    import time
+    from pathlib import Path
+
+    run = simulate(days=0.003, seed=31, start="2026-08-14T20:00")
+    sink = KafkaSink(BOOTSTRAP, serializer=avro_serializer(REGISTRY))
+    for ev in run.events:
+        sink.write(ev)
+    sink.close()
+
+    sf_config = json.loads(
+        (Path(__file__).parents[2] / "infra" / "connect" / "snowflake-sink.json").read_text()
+    )
+    converter = {k: v for k, v in sf_config.items() if k.split(".")[0] in ("key", "value")}
+    name = f"itest_decode_{uuid.uuid4().hex[:8]}"
+    out = f"/tmp/{name}.txt"
+    config = {
+        "connector.class": "org.apache.kafka.connect.file.FileStreamSinkConnector",
+        "tasks.max": "1",
+        "topics": "fooddel.orders.v1",
+        "file": out,
+        "errors.tolerance": "none",
+        **converter,
+    }
+    code, _ = _connect_call("PUT", f"/connectors/{name}/config", config)
+    assert code in (200, 201)
+    try:
+        lines, state = 0, None
+        for _ in range(30):
+            time.sleep(2)
+            _, status = _connect_call("GET", f"/connectors/{name}/status")
+            tasks = (status or {}).get("tasks", [])
+            state = tasks[0]["state"] if tasks else None
+            assert state != "FAILED", tasks[0].get("trace", "")[:2000]
+            result = subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "fooddel-connect",
+                    "sh",
+                    "-c",
+                    f"wc -l < {out} 2>/dev/null || echo 0",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            lines = int(result.stdout.strip() or 0)
+            if lines > 0:
+                break
+        assert lines > 0, f"no records decoded (task state {state})"
+    finally:
+        _connect_call("DELETE", f"/connectors/{name}")

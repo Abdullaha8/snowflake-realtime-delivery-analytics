@@ -102,7 +102,10 @@ services:
       CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
       CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
-      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+      # Must match the producer: subjects are <topic>-<record name>, not <topic>-value
+      CONNECT_VALUE_CONVERTER_VALUE_SUBJECT_NAME_STRATEGY: io.confluent.kafka.serializers.subject.TopicRecordNameStrategy
+      # filestream-connectors: FileStreamSink for the local converter integration test
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components,/usr/share/filestream-connectors
       CONNECT_CONFIG_PROVIDERS: env
       CONNECT_CONFIG_PROVIDERS_ENV_CLASS: org.apache.kafka.common.config.provider.EnvVarConfigProvider
       CONNECT_LOG4J_LOGGERS: org.reflections=ERROR

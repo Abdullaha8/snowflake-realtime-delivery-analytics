@@ -59,6 +59,8 @@ def test_connector_config_secrets_come_from_env():
     assert config["snowflake.enable.schematization"] == "false"
     # 4.x defaults to a v3-migration safety check that rejects a fresh v4 config at startup
     assert config["snowflake.streaming.validate.compatibility.with.classic"] == "false"
+    # must match the producer's subject naming (simulator.avro.subject)
+    assert config["value.converter.value.subject.name.strategy"].endswith("TopicRecordNameStrategy")
     topics = config["topics"].split(",")
     mapped = dict(pair.split(":") for pair in config["snowflake.topic2table.map"].split(","))
     assert set(topics) == set(mapped)
