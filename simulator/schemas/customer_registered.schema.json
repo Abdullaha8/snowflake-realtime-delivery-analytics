@@ -1,0 +1,111 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "CUSTOMER_REGISTERED"
+    },
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "event_ts": {
+      "title": "Event Ts",
+      "type": "string"
+    },
+    "emitted_ts": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Emitted Ts"
+    },
+    "source": {
+      "enum": [
+        "customer_app",
+        "restaurant_app",
+        "driver_app",
+        "platform"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "customer_id": {
+          "title": "Customer Id",
+          "type": "string"
+        },
+        "full_name": {
+          "title": "Full Name",
+          "type": "string"
+        },
+        "email": {
+          "title": "Email",
+          "type": "string"
+        },
+        "phone": {
+          "title": "Phone",
+          "type": "string"
+        },
+        "zone_id": {
+          "title": "Zone Id",
+          "type": "string"
+        },
+        "h3_r8": {
+          "title": "H3 R8",
+          "type": "string"
+        },
+        "home_lat": {
+          "title": "Home Lat",
+          "type": "number"
+        },
+        "home_lng": {
+          "title": "Home Lng",
+          "type": "number"
+        },
+        "signup_channel": {
+          "enum": [
+            "ORGANIC",
+            "REFERRAL",
+            "PAID_AD"
+          ],
+          "title": "Signup Channel",
+          "type": "string"
+        }
+      },
+      "required": [
+        "customer_id",
+        "full_name",
+        "email",
+        "phone",
+        "zone_id",
+        "h3_r8",
+        "home_lat",
+        "home_lng",
+        "signup_channel"
+      ],
+      "title": "CustomerRegistered",
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "event_ts",
+    "emitted_ts",
+    "source",
+    "data"
+  ],
+  "title": "CUSTOMER_REGISTERED",
+  "type": "object"
+}

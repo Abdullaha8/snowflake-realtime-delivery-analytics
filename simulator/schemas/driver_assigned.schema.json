@@ -1,0 +1,89 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "DRIVER_ASSIGNED"
+    },
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "event_ts": {
+      "title": "Event Ts",
+      "type": "string"
+    },
+    "emitted_ts": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Emitted Ts"
+    },
+    "source": {
+      "enum": [
+        "customer_app",
+        "restaurant_app",
+        "driver_app",
+        "platform"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "order_id": {
+          "title": "Order Id",
+          "type": "string"
+        },
+        "driver_id": {
+          "title": "Driver Id",
+          "type": "string"
+        },
+        "assign_attempts": {
+          "minimum": 1,
+          "title": "Assign Attempts",
+          "type": "integer"
+        },
+        "driver_distance_km": {
+          "minimum": 0,
+          "title": "Driver Distance Km",
+          "type": "number"
+        },
+        "search_ring_k": {
+          "minimum": 0,
+          "title": "Search Ring K",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "order_id",
+        "driver_id",
+        "assign_attempts",
+        "driver_distance_km",
+        "search_ring_k"
+      ],
+      "title": "DriverAssigned",
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "event_ts",
+    "emitted_ts",
+    "source",
+    "data"
+  ],
+  "title": "DRIVER_ASSIGNED",
+  "type": "object"
+}

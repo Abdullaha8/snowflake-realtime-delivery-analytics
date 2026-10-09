@@ -1,0 +1,93 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "ORDER_DELIVERED"
+    },
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "event_ts": {
+      "title": "Event Ts",
+      "type": "string"
+    },
+    "emitted_ts": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Emitted Ts"
+    },
+    "source": {
+      "enum": [
+        "customer_app",
+        "restaurant_app",
+        "driver_app",
+        "platform"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "order_id": {
+          "title": "Order Id",
+          "type": "string"
+        },
+        "driver_id": {
+          "title": "Driver Id",
+          "type": "string"
+        },
+        "lat": {
+          "title": "Lat",
+          "type": "number"
+        },
+        "lng": {
+          "title": "Lng",
+          "type": "number"
+        },
+        "distance_km": {
+          "minimum": 0,
+          "title": "Distance Km",
+          "type": "number"
+        },
+        "actual_delivery_min": {
+          "exclusiveMinimum": 0,
+          "title": "Actual Delivery Min",
+          "type": "number"
+        }
+      },
+      "required": [
+        "order_id",
+        "driver_id",
+        "lat",
+        "lng",
+        "distance_km",
+        "actual_delivery_min"
+      ],
+      "title": "OrderDelivered",
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "event_ts",
+    "emitted_ts",
+    "source",
+    "data"
+  ],
+  "title": "ORDER_DELIVERED",
+  "type": "object"
+}

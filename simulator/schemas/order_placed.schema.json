@@ -1,0 +1,190 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "ORDER_PLACED"
+    },
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "event_ts": {
+      "title": "Event Ts",
+      "type": "string"
+    },
+    "emitted_ts": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Emitted Ts"
+    },
+    "source": {
+      "enum": [
+        "customer_app",
+        "restaurant_app",
+        "driver_app",
+        "platform"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "order_id": {
+          "title": "Order Id",
+          "type": "string"
+        },
+        "customer_id": {
+          "title": "Customer Id",
+          "type": "string"
+        },
+        "restaurant_id": {
+          "title": "Restaurant Id",
+          "type": "string"
+        },
+        "zone_id": {
+          "title": "Zone Id",
+          "type": "string"
+        },
+        "h3_r8": {
+          "title": "H3 R8",
+          "type": "string"
+        },
+        "delivery_lat": {
+          "title": "Delivery Lat",
+          "type": "number"
+        },
+        "delivery_lng": {
+          "title": "Delivery Lng",
+          "type": "number"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/OrderItem"
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        },
+        "subtotal_inr": {
+          "minimum": 0,
+          "title": "Subtotal Inr",
+          "type": "integer"
+        },
+        "delivery_fee_inr": {
+          "minimum": 0,
+          "title": "Delivery Fee Inr",
+          "type": "integer"
+        },
+        "surge_fee_inr": {
+          "minimum": 0,
+          "title": "Surge Fee Inr",
+          "type": "integer"
+        },
+        "discount_inr": {
+          "minimum": 0,
+          "title": "Discount Inr",
+          "type": "integer"
+        },
+        "total_inr": {
+          "minimum": 0,
+          "title": "Total Inr",
+          "type": "integer"
+        },
+        "payment_method": {
+          "enum": [
+            "UPI",
+            "CARD",
+            "COD",
+            "WALLET"
+          ],
+          "title": "Payment Method",
+          "type": "string"
+        },
+        "promised_eta_min": {
+          "exclusiveMinimum": 0,
+          "title": "Promised Eta Min",
+          "type": "integer"
+        },
+        "is_raining": {
+          "title": "Is Raining",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "order_id",
+        "customer_id",
+        "restaurant_id",
+        "zone_id",
+        "h3_r8",
+        "delivery_lat",
+        "delivery_lng",
+        "items",
+        "subtotal_inr",
+        "delivery_fee_inr",
+        "surge_fee_inr",
+        "discount_inr",
+        "total_inr",
+        "payment_method",
+        "promised_eta_min",
+        "is_raining"
+      ],
+      "title": "OrderPlaced",
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "event_ts",
+    "emitted_ts",
+    "source",
+    "data"
+  ],
+  "title": "ORDER_PLACED",
+  "type": "object",
+  "$defs": {
+    "OrderItem": {
+      "additionalProperties": false,
+      "properties": {
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "qty": {
+          "minimum": 1,
+          "title": "Qty",
+          "type": "integer"
+        },
+        "unit_price_inr": {
+          "minimum": 0,
+          "title": "Unit Price Inr",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "item_id",
+        "name",
+        "qty",
+        "unit_price_inr"
+      ],
+      "title": "OrderItem",
+      "type": "object"
+    }
+  }
+}

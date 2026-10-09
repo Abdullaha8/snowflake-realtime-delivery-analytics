@@ -1,0 +1,130 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "DRIVER_LOCATION"
+    },
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "event_ts": {
+      "title": "Event Ts",
+      "type": "string"
+    },
+    "emitted_ts": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Emitted Ts"
+    },
+    "source": {
+      "enum": [
+        "customer_app",
+        "restaurant_app",
+        "driver_app",
+        "platform"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "driver_id": {
+          "title": "Driver Id",
+          "type": "string"
+        },
+        "lat": {
+          "title": "Lat",
+          "type": "number"
+        },
+        "lng": {
+          "title": "Lng",
+          "type": "number"
+        },
+        "h3_r8": {
+          "title": "H3 R8",
+          "type": "string"
+        },
+        "zone_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Zone Id"
+        },
+        "status": {
+          "enum": [
+            "IDLE",
+            "ASSIGNED",
+            "AT_RESTAURANT",
+            "DELIVERING",
+            "OFFLINE"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "order_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Order Id"
+        },
+        "speed_kmh": {
+          "minimum": 0,
+          "title": "Speed Kmh",
+          "type": "number"
+        },
+        "battery_pct": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Battery Pct",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "driver_id",
+        "lat",
+        "lng",
+        "h3_r8",
+        "zone_id",
+        "status",
+        "order_id",
+        "speed_kmh",
+        "battery_pct"
+      ],
+      "title": "DriverLocation",
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "event_ts",
+    "emitted_ts",
+    "source",
+    "data"
+  ],
+  "title": "DRIVER_LOCATION",
+  "type": "object"
+}

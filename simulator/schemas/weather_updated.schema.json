@@ -1,0 +1,107 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "WEATHER_UPDATED"
+    },
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "event_ts": {
+      "title": "Event Ts",
+      "type": "string"
+    },
+    "emitted_ts": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Emitted Ts"
+    },
+    "source": {
+      "enum": [
+        "customer_app",
+        "restaurant_app",
+        "driver_app",
+        "platform"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "title": "City",
+          "type": "string"
+        },
+        "condition": {
+          "enum": [
+            "CLEAR",
+            "RAIN"
+          ],
+          "title": "Condition",
+          "type": "string"
+        },
+        "intensity": {
+          "anyOf": [
+            {
+              "enum": [
+                "LIGHT",
+                "MODERATE",
+                "HEAVY"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Intensity"
+        },
+        "demand_multiplier": {
+          "title": "Demand Multiplier",
+          "type": "number"
+        },
+        "supply_multiplier": {
+          "title": "Supply Multiplier",
+          "type": "number"
+        },
+        "travel_time_multiplier": {
+          "title": "Travel Time Multiplier",
+          "type": "number"
+        }
+      },
+      "required": [
+        "city",
+        "condition",
+        "intensity",
+        "demand_multiplier",
+        "supply_multiplier",
+        "travel_time_multiplier"
+      ],
+      "title": "WeatherUpdated",
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "event_ts",
+    "emitted_ts",
+    "source",
+    "data"
+  ],
+  "title": "WEATHER_UPDATED",
+  "type": "object"
+}

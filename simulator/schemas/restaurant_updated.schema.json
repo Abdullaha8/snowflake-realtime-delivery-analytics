@@ -1,0 +1,138 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "RESTAURANT_UPDATED"
+    },
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "event_ts": {
+      "title": "Event Ts",
+      "type": "string"
+    },
+    "emitted_ts": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Emitted Ts"
+    },
+    "source": {
+      "enum": [
+        "customer_app",
+        "restaurant_app",
+        "driver_app",
+        "platform"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "restaurant_id": {
+          "title": "Restaurant Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "zone_id": {
+          "title": "Zone Id",
+          "type": "string"
+        },
+        "h3_r8": {
+          "title": "H3 R8",
+          "type": "string"
+        },
+        "lat": {
+          "title": "Lat",
+          "type": "number"
+        },
+        "lng": {
+          "title": "Lng",
+          "type": "number"
+        },
+        "cuisine": {
+          "title": "Cuisine",
+          "type": "string"
+        },
+        "price_band": {
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Price Band",
+          "type": "integer"
+        },
+        "avg_prep_min": {
+          "exclusiveMinimum": 0,
+          "title": "Avg Prep Min",
+          "type": "number"
+        },
+        "rating": {
+          "maximum": 5,
+          "minimum": 0,
+          "title": "Rating",
+          "type": "number"
+        },
+        "is_active": {
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "change_type": {
+          "enum": [
+            "SNAPSHOT",
+            "UPDATE"
+          ],
+          "title": "Change Type",
+          "type": "string"
+        },
+        "changed_fields": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Changed Fields",
+          "type": "array"
+        }
+      },
+      "required": [
+        "restaurant_id",
+        "name",
+        "zone_id",
+        "h3_r8",
+        "lat",
+        "lng",
+        "cuisine",
+        "price_band",
+        "avg_prep_min",
+        "rating",
+        "is_active",
+        "change_type",
+        "changed_fields"
+      ],
+      "title": "RestaurantUpdated",
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "event_ts",
+    "emitted_ts",
+    "source",
+    "data"
+  ],
+  "title": "RESTAURANT_UPDATED",
+  "type": "object"
+}
