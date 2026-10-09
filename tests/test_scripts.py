@@ -57,6 +57,8 @@ def test_connector_config_secrets_come_from_env():
     config = json.loads(connect.CONFIG_PATH.read_text())
     assert config["snowflake.private.key"] == "${env:SNOWFLAKE_CONNECTOR_PRIVATE_KEY}"
     assert config["snowflake.enable.schematization"] == "false"
+    # 4.x defaults to a v3-migration safety check that rejects a fresh v4 config at startup
+    assert config["snowflake.streaming.validate.compatibility.with.classic"] == "false"
     topics = config["topics"].split(",")
     mapped = dict(pair.split(":") for pair in config["snowflake.topic2table.map"].split(","))
     assert set(topics) == set(mapped)

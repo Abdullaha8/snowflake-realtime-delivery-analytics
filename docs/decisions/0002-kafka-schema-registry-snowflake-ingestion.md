@@ -26,6 +26,10 @@ The Connect image is `cp-kafka-connect:7.8.2`, which Snowflake tests against. Th
 Schema Registry and Connect all run Confluent 7.8.2, because the docs ask for matching broker and
 Connect versions.
 
+**Gotcha (found on first deploy):** 4.x enables `snowflake.streaming.validate.compatibility.with.classic`
+by default. It is a v3-migration safety check, and it rejects a fresh v4 config (server-side
+validation, no `classic.offset.migration`). We aren't migrating, so it's set to `false`.
+
 *Rejected:*
 - v3 (Snowpipe micro-batches): higher latency, and it's on its way out.
 - Snowpipe from S3: file-based with minute-level latency, and it isn't streaming.

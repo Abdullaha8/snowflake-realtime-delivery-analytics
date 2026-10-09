@@ -13,6 +13,7 @@
 
   "snowflake.enable.schematization": "false",
   "snowflake.autocreate.table.type": "none",
+  "snowflake.streaming.validate.compatibility.with.classic": "false",
 
   "key.converter": "org.apache.kafka.connect.storage.StringConverter",
   "value.converter": "io.confluent.connect.avro.AvroConverter",
