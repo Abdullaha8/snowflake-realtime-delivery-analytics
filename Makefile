@@ -88,11 +88,11 @@ sim:  ## live simulator, auto-stops after DURATION wall seconds (SINK=stdout|jso
 	$(PY) -m simulator run --mode live --sink $(SINK) --duration $(DURATION) --speed $(SPEED) --out $(OUT) $(ARGS)
 
 sim-sample:  ## 3 simulated hours of Friday dinner rush -> data/sample (jsonl), then report
-	$(PY) -m simulator run --mode backfill --start 2026-10-09T19:00 --days 0.125 --pings --seed 42 --sink jsonl --out data/sample $(ARGS)
+	$(PY) -m simulator run --mode backfill --start 2026-10-09T19:00 --days 0.125 --pings --seed 42 --sink jsonl --out data/sample --overwrite $(ARGS)
 	$(PY) -m simulator report data/sample
 
 sim-backfill:  ## history since launch (2026-07-01) -> data/backfill (gzipped jsonl, no pings)
-	$(PY) -m simulator run --mode backfill --sink jsonl --gzip --out data/backfill $(ARGS)
+	$(PY) -m simulator run --mode backfill --sink jsonl --gzip --out data/backfill --overwrite $(ARGS)
 
 sim-report:  ## summarise a jsonl run: make sim-report OUT=data/sample
 	$(PY) -m simulator report $(OUT)

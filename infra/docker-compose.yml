@@ -77,6 +77,10 @@ services:
         condition: service_healthy
       schema-registry:
         condition: service_healthy
+      # Topics (incl. the DLQ) must exist first; also tells `up --wait` that kafka-init is
+      # expected to exit.
+      kafka-init:
+        condition: service_completed_successfully
     ports:
       - "8083:8083"
     # Snowflake connection settings + the connector's private key come from ../.env and are

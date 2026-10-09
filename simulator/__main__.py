@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import random
+import shutil
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -38,6 +39,8 @@ def _run(args: argparse.Namespace) -> int:
     run_id = make_run_id(cfg.mode, cfg.seed)
     out = Path(args.out)
     if args.sink == "jsonl":
+        if args.overwrite and out.exists():
+            shutil.rmtree(out)  # one run per directory: earlier runs would look like duplicates
         sink = JsonlSink(out, run_id, compress=args.gzip)
         manifest_path = out / "_manifest" / f"{run_id}.jsonl"
     else:
@@ -114,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--sink", choices=["stdout", "jsonl", "kafka"], default="stdout")
     r.add_argument("--out", default="data/sim", help="jsonl output directory")
     r.add_argument("--gzip", action="store_true", help="gzip jsonl files")
+    r.add_argument("--overwrite", action="store_true", help="jsonl: delete --out first")
     r.add_argument("--start", help="simulated start, ISO-8601 (naive = IST)")
     r.add_argument("--duration", type=float, default=600, help="live: wall seconds (auto-stop)")
     r.add_argument("--speed", type=float, default=1.0, help="live: sim seconds per wall second")

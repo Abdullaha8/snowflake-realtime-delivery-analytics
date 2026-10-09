@@ -118,3 +118,25 @@ def test_report_on_jsonl_run(tmp_path):
 def test_simulate_helper_smoke():
     run = simulate(days=0.01, seed=4)
     assert run.stats.emitted == len(run.events) > 0
+
+
+def test_report_warns_when_a_directory_mixes_runs(tmp_path):
+    from simulator.report import report_dir, run_ids
+
+    for run in ("r1", "r2"):
+        sink = JsonlSink(tmp_path, run)
+        sink.write(_event())
+        sink.close()
+    assert run_ids(tmp_path) == ["r1", "r2"]
+    assert report_dir(tmp_path).startswith("WARNING")
+
+
+def test_cli_overwrite_leaves_a_single_run(tmp_path):
+    from simulator.__main__ import main
+    from simulator.report import run_ids
+
+    args = ["run", "--mode", "backfill", "--start", "2026-08-14T19:00", "--days", "0.005"]
+    args += ["--sink", "jsonl", "--out", str(tmp_path / "out")]
+    main([*args, "--seed", "1"])
+    main([*args, "--seed", "2", "--overwrite"])
+    assert len(run_ids(tmp_path / "out")) == 1

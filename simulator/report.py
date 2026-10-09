@@ -180,4 +180,18 @@ def format_report(s: dict) -> str:
 def report_dir(path: Path) -> str:
     """Events within each file are in emit order; merge files by emitted_ts for the report."""
     events = sorted(iter_events(path), key=lambda e: e["emitted_ts"])
-    return format_report(summarize(events, load_manifest(path)))
+    report = format_report(summarize(events, load_manifest(path)))
+    runs = run_ids(path)
+    if len(runs) > 1:
+        warning = (
+            f"WARNING: {path} holds {len(runs)} runs ({', '.join(runs)}). Same-seed runs share "
+            "event_ids, so they show up as duplicates. Re-run with --overwrite for one clean run.\n"
+        )
+        report = warning + "\n" + report
+    return report
+
+
+def run_ids(path: Path) -> list[str]:
+    """Run ids present in a jsonl output dir (from part-<run_id>.jsonl[.gz] file names)."""
+    names = {p.name for p in Path(path).rglob("part-*.jsonl*")}
+    return sorted({n.removeprefix("part-").split(".jsonl")[0] for n in names})
