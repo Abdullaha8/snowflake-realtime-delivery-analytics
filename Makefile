@@ -24,7 +24,7 @@ OUT ?= data/sim
 
 .PHONY: help install up build down stop topics schemas schemas-register schemas-check \
         connector-up connector-status connector-down sf-keygen sf-setup sf-verify sf-suspend \
-        load-backfill sf-reset-bronze dbt-deps dbt dbt-freshness dbt-docs dbt-docs-serve reconcile-marts seeds-gen sf-ops alerts-setup alerts-resume alerts-suspend alerts-status ml-setup ml-train ml-backtest ml-score airflow-env airflow-up airflow-down airflow-test airflow-trigger sf-dt dt-status dt-refresh dt-demo dt-normal dt-suspend         dt-resume sf-verify-dt reconcile sim sim-sample sim-backfill sim-report lint format test test-integration clean
+        load-backfill sf-reset-bronze dbt-deps dbt dbt-freshness dbt-docs dbt-docs-serve reconcile-marts seeds-gen sf-ops alerts-setup alerts-resume alerts-suspend alerts-status ml-setup ml-train ml-backtest ml-score sf-governance governance-check qa-clone qa-drop cost-report airflow-env airflow-up airflow-down airflow-test airflow-trigger sf-dt dt-status dt-refresh dt-demo dt-normal dt-suspend         dt-resume sf-verify-dt reconcile sim sim-sample sim-backfill sim-report lint format test test-integration clean
 
 help:  ## list targets
 	@$(PY) -c "import re;[print(f'  {m[0]:<18}{m[1]}') for m in re.findall(r'^([a-z-]+):.*?## (.*)$$', open('Makefile').read(), re.M)]"
@@ -192,6 +192,22 @@ ml-backtest:  ## score TEST in-warehouse; MAE must match the offline result
 
 ml-score:  ## score LIVE orders not yet scored by the default version (what the DAG does)
 	$(PY) ml/score.py
+
+# --- governance + cost (P7) --------------------------------------------------------------
+sf-governance:  ## roles + zone mapping for the secure-view layer (run BEFORE make dbt)
+	$(PY) scripts/sf.py run snowflake/01_setup.sql snowflake/10_governance.sql
+
+governance-check:  ## role x view access matrix (PII masking + zone filtering) with PASS/FAIL
+	$(PY) scripts/governance_check.py
+
+qa-clone:  ## zero-copy clone FOODDEL_DEV -> FOODDEL_QA (DTs + alerts suspended) + Time Travel demo
+	$(PY) scripts/qa_clone.py
+
+qa-drop:  ## drop the FOODDEL_QA clone
+	$(PY) scripts/qa_clone.py --drop
+
+cost-report:  ## ACCOUNT_USAGE -> docs/cost_report.md (credits by service/warehouse/workload, storage)
+	$(PY) scripts/cost_report.py
 
 # --- simulator ---------------------------------------------------------------------------
 sim:  ## live simulator, auto-stops after DURATION wall seconds (SINK=stdout|jsonl|kafka)

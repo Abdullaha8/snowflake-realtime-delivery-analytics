@@ -100,4 +100,9 @@ P8 Streamlit dashboards, Terraform, GitHub Actions, final README, resume bullets
   - ml/train.py: Snowpark pull → sklearn Pipeline(OneHot→XGB, L1) grid on VALID → refit TRAIN+VALID → TEST → registry `ML.ETA_XGB` V<n> + ML.MODEL_VERSIONS; promote only if TEST MAE better. Output field `output_feature_0`.
   - Results: V1 test MAE 4.293 (promised 6.446, rule 7.615, zone×hour 7.530); backtest in-warehouse 4.2934 = offline; V2 (dropped features) 5.574 not promoted; LIVE Oct 10 MAE 4.49 vs promised 6.12.
   - Scoring: DAG task score_eta (after data_quality) via include/fooddel/eta_scoring.py (pure SQL); ML.ETA_PREDICTIONS, V_ETA_ACCURACY_DAILY, ML.ALERT_ETA_DRIFT (cron 06:00 IST, suspended). sf.py alerts covers OPS.* and ML.*.
-- [ ] P7
+- [x] P7 (2026-10-10): governance + cost, verified. ADR 0007, docs/cost_report.md.
+  - Account is STANDARD edition (masking/row access policies = "Unsupported feature" 391811) → governance via dbt secure views in MARTS_SECURE (models/secure, macros/governance.sql: mask_email/phone/name, zone_filter). Consumers (BI, PII_READER, OPS_WEST/EAST) have NO MARTS grants (02 no longer grants BI on MARTS; 10 revokes). GOVERNANCE.ZONE_ACCESS (role→zone, CURRENT_ROLE()).
+  - Roles: FOODDEL_PII_READER (inherits BI), FOODDEL_OPS_WEST/EAST; all granted to admin user. Test with USE SECONDARY ROLES NONE. `make sf-governance` → `make dbt` → `make governance-check` (6/6).
+  - `make qa-clone` (clone + suspend DTs/alerts + Time Travel restore) / `make qa-drop`. `make cost-report` → docs/cost_report.md (1.03 credits total so far). Airflow conn sets QUERY_TAG=airflow.
+  - Skipped by choice: SYSTEM$CLASSIFY, dbt build on clone.
+- [ ] P8

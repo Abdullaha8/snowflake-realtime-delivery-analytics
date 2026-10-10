@@ -30,6 +30,8 @@ def render(env: dict[str, str]) -> str:
             "warehouse": "WH_TRANSFORM",
             "role": "FOODDEL_TRANSFORM",
             "private_key_file": KEY_IN_CONTAINER,
+            # attributes pipeline compute to "airflow" in the cost report
+            "session_parameters": {"QUERY_TAG": "airflow"},
         },
     }
     lines = [

@@ -1,0 +1,14 @@
+version: 2
+
+models:
+  - name: v_dim_customer
+    description: dim_customer with FULL_NAME / EMAIL / PHONE masked unless FOODDEL_PII_READER; rows by home zone for zone managers.
+    columns:
+      - name: CUSTOMER_ID
+        data_tests: [unique, not_null]
+  - name: v_fct_orders
+    description: fct_orders, rows filtered to the reader's zones (GOVERNANCE.ZONE_ACCESS).
+  - name: v_mart_daily_kpis
+    description: mart_daily_kpis, rows filtered to the reader's zones.
+  - name: v_mart_restaurant_daily
+    description: mart_restaurant_daily, rows filtered to the reader's zones.

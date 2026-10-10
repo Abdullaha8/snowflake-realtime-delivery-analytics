@@ -35,6 +35,14 @@ models:
     ml:
       +schema: ML
       +materialized: table
+    # Consumers' only door into MARTS: secure views (definition hidden, PII masked, zone rows
+    # filtered). Grants re-applied by dbt on every build.
+    secure:
+      +schema: MARTS_SECURE
+      +materialized: view
+      +secure: true
+      +grants:
+        select: [FOODDEL_BI, FOODDEL_OPS_WEST, FOODDEL_OPS_EAST]
 
 seeds:
   fooddel:

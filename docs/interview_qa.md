@@ -252,3 +252,38 @@ version's test MAE. It evaluated to false on live data, which is correct.
 I optimise absolute error, which predicts the median. Delivery times are right-skewed, so the
 median sits slightly below the mean. For a customer-facing promise you'd predict a higher
 quantile (say p80) to keep SLA breaches down. For accuracy, the median is the right target.
+
+## P7: Governance and cost
+
+**How do you protect PII?**
+My trial account is Standard edition, which has no masking or row access policies. So the
+only way consumers reach MARTS is a layer of secure views built by dbt. Shared macros mask
+email, phone and name unless the reader holds the PII role, and filter rows to the zones
+mapped to a zone manager's role in a governance table. Consumer roles have no privileges on
+the underlying tables at all. A check script runs every role and proves it: BI sees masked
+PII across all zones, support sees clear text, west and east managers each see their 6 zones,
+and their row counts add up to the total. All 6 checks still pass after a full rebuild.
+
+**What would you do on Enterprise?**
+Tag-based masking: one masking policy per data type attached to a PII tag, branching on the
+column's tag value, plus a row access policy on ZONE_ID backed by the same mapping table. Then
+the tables themselves are protected at every layer, not just the views. One gotcha: a tag can
+carry only one masking policy per data type, so the policy has to read the column's tag value.
+
+**Why a mapping table instead of hardcoding zones?**
+Access becomes data. Giving a manager a new zone is an INSERT, auditable and needing no
+deployment.
+
+**How did you use zero-copy cloning?**
+The whole DEV database clones in about 10 seconds with no data copied, for safe testing. I
+suspend cloned Dynamic Tables and alerts immediately, because they would otherwise start
+refreshing on their own. To show Time Travel, I deleted 19k orders in the clone and restored
+them with `BEFORE (STATEMENT => '<query id>')`, leaving DEV untouched.
+
+**What did the whole platform cost?**
+About 1 credit across all seven phases: warehouses 0.85, Snowpipe Streaming 0.0003 (per GB,
+serverless), alerts 0.002. The levers:
+- XSMALL warehouses with 60 s auto-suspend and resource monitors
+- incremental-only Dynamic Tables with skipped refreshes
+- an Airflow DAG that short-circuits on metadata when there's no new data
+- query tags, so every credit can be attributed to a workload

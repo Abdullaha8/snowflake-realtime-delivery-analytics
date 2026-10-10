@@ -21,6 +21,10 @@ CREATE SCHEMA IF NOT EXISTS ${SNOWFLAKE_DATABASE}.OPS
 COMMENT = 'Pipeline operations: runs, data-quality results, latency metrics, alerts';
 CREATE SCHEMA IF NOT EXISTS ${SNOWFLAKE_DATABASE}.ML
 COMMENT = 'ETA model: feature table, Model Registry models, predictions, accuracy';
+CREATE SCHEMA IF NOT EXISTS ${SNOWFLAKE_DATABASE}.GOVERNANCE
+COMMENT = 'Zone access mapping for row-level security';
+CREATE SCHEMA IF NOT EXISTS ${SNOWFLAKE_DATABASE}.MARTS_SECURE
+COMMENT = 'Secure views over MARTS: PII masked, rows filtered by zone (dbt models/secure)';
 
 -- Warehouses: XSMALL, suspend after 60 s idle, created suspended so setup costs nothing.
 -- Snowpipe Streaming ingestion is serverless and does not use a warehouse at all.

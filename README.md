@@ -14,7 +14,8 @@ Tables + dbt → Snowpark ML → Streamlit. See [docs/architecture.md](docs/arch
 | P4 | ✅ | dbt star schema: incremental fct_orders, SCD2 restaurants (point-in-time), cohorts, daily KPIs; 58/58 dbt checks, 35/35 vs ground truth |
 | P5 | ✅ | Airflow 3 pipeline DAG, persisted data-quality checks, Snowflake Alerts, latency metric (p50 0.21 s producer→Snowflake) |
 | P6 | ✅ | ETA model (XGBoost) in Snowflake Model Registry, in-warehouse scoring, daily MAE + drift alert: test MAE 4.29 min vs 6.45 for the current promise |
-| P7–P8 | ⏳ | governance, dashboards |
+| P7 | ✅ | Governance on Standard edition: secure views mask PII and filter zones by role (6/6 checks), zero-copy clone + Time Travel, [cost report](docs/cost_report.md) (1.03 credits total) |
+| P8 | ⏳ | dashboards, Terraform, CI, final docs |
 
 ## Quick start
 
@@ -97,6 +98,16 @@ make ml-backtest        # score TEST in-warehouse; MAE must equal the offline re
 make ml-score           # score LIVE orders (the DAG's score_eta task does this every run)
 ```
 
+### Governance + cost (P7)
+
+```bash
+make sf-governance      # roles (PII_READER, OPS_WEST/EAST), zone mapping, revoke direct MARTS access
+make dbt                # builds MARTS_SECURE secure views (PII masked, zones filtered) + grants
+make governance-check   # role x view matrix: masking, zones, no direct MARTS access -> PASS/FAIL
+make qa-clone           # zero-copy clone + Time Travel restore demo; make qa-drop afterwards
+make cost-report        # docs/cost_report.md from ACCOUNT_USAGE
+```
+
 ## The simulator
 
 - **Entities:**
@@ -121,7 +132,7 @@ python -m simulator report <dir>    # volumes, KPIs, observed vs injected chaos
 python -m simulator schemas         # regenerate JSON Schemas
 ```
 
-Design rationale: [ADR 0001](docs/decisions/0001-simulator-design.md), [ADR 0002](docs/decisions/0002-kafka-schema-registry-snowflake-ingestion.md), [ADR 0003](docs/decisions/0003-dynamic-tables-silver-gold.md), [ADR 0004](docs/decisions/0004-dbt-historical-layer.md), [ADR 0005](docs/decisions/0005-orchestration-dq-alerts-latency.md), [ADR 0006](docs/decisions/0006-eta-model-registry-mae.md).
+Design rationale: [ADR 0001](docs/decisions/0001-simulator-design.md), [ADR 0002](docs/decisions/0002-kafka-schema-registry-snowflake-ingestion.md), [ADR 0003](docs/decisions/0003-dynamic-tables-silver-gold.md), [ADR 0004](docs/decisions/0004-dbt-historical-layer.md), [ADR 0005](docs/decisions/0005-orchestration-dq-alerts-latency.md), [ADR 0006](docs/decisions/0006-eta-model-registry-mae.md), [ADR 0007](docs/decisions/0007-governance-and-cost.md).
 
 ## Repo layout
 

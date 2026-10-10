@@ -28,7 +28,8 @@ flowchart LR
 | P4 | done, reconciled 35/35 | dbt star schema on SILVER: fct_orders (incremental), SCD2 dim_restaurant, dim_customer/zone/driver/date, daily KPIs, cohort retention, restaurant daily |
 | P5 | done | Airflow 3 DAG (skip-if-no-data, DT refresh, dbt, DQ, latency), OPS schema, 3 Snowflake Alerts, SVC_AIRFLOW |
 | P6 | done | ETA model: dbt features, XGBoost pipeline in Snowflake Model Registry, in-warehouse scoring in the DAG, daily MAE + drift alert (test MAE 4.29 vs promised 6.45) |
-| P7-P8 | planned | see CLAUDE.md |
+| P7 | done | Secure-view governance (Standard edition): PII masking + zone row filtering by role, zero-copy clone + Time Travel, cost report |
+| P8 | planned | see CLAUDE.md |
 
 ## Local stack (`make up`)
 
@@ -140,6 +141,19 @@ flowchart LR
     A --> D{{ALERT_ETA_DRIFT}}
 ```
 
+## Governance (P7)
+
+```mermaid
+flowchart LR
+    M[(MARTS tables)] --> SV[MARTS_SECURE secure views<br/>mask_* + zone_filter macros]
+    ZA[(GOVERNANCE.ZONE_ACCESS)] --> SV
+    SV --> BI[FOODDEL_BI<br/>all zones, PII masked]
+    SV --> PR[FOODDEL_PII_READER<br/>all zones, clear PII]
+    SV --> OW[FOODDEL_OPS_WEST<br/>6 zones, masked]
+    SV --> OE[FOODDEL_OPS_EAST<br/>6 zones, masked]
+    M -. no grants .-x BI
+```
+
 ## Design rationale
 - [ADR 0001: simulator](decisions/0001-simulator-design.md)
 - [ADR 0002: Kafka, Schema Registry, Snowflake ingestion](decisions/0002-kafka-schema-registry-snowflake-ingestion.md)
@@ -147,3 +161,4 @@ flowchart LR
 - [ADR 0004: dbt historical layer](decisions/0004-dbt-historical-layer.md)
 - [ADR 0005: orchestration, data quality, alerts, latency](decisions/0005-orchestration-dq-alerts-latency.md)
 - [ADR 0006: ETA model, Model Registry, MAE tracking](decisions/0006-eta-model-registry-mae.md)
+- [ADR 0007: governance and cost](decisions/0007-governance-and-cost.md) · [cost report](cost_report.md)

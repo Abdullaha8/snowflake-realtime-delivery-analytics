@@ -174,3 +174,29 @@ def test_airflow_env_has_only_what_airflow_needs():
     assert "PRIVATE_KEY=" not in text and "CONNECTOR" not in text and "ADMIN" not in text
     conn = json.loads(text.split("AIRFLOW_CONN_SNOWFLAKE_DEFAULT=", 1)[1].splitlines()[0])
     assert conn["login"] == "SVC_AIRFLOW" and conn["extra"]["role"] == "FOODDEL_TRANSFORM"
+
+
+def test_consumers_only_reach_marts_through_secure_views():
+    rbac = (ROOT / "snowflake" / "02_rbac.sql").read_text()
+    governance = (ROOT / "snowflake" / "10_governance.sql").read_text()
+    for role in ("FOODDEL_BI", "FOODDEL_OPS_WEST", "FOODDEL_OPS_EAST", "FOODDEL_PII_READER"):
+        for sql in (rbac, governance):
+            for line in sql.splitlines():
+                if line.startswith("GRANT") and ".MARTS " in line + " " and f"ROLE {role};" in line:
+                    raise AssertionError(f"direct MARTS grant to {role}: {line}")
+    secure = {p.stem for p in (ROOT / "dbt" / "models" / "secure").glob("v_*.sql")}
+    marts = {p.stem for p in (ROOT / "dbt" / "models" / "marts").glob("*.sql")}
+    assert secure == {f"v_{m}" for m in marts}, "every mart needs a secure view (and only marts)"
+    customer = (ROOT / "dbt" / "models" / "secure" / "v_dim_customer.sql").read_text()
+    for col in ("FULL_NAME", "EMAIL", "PHONE"):
+        assert "mask_" in customer and f"'{col}'" in customer, col
+
+
+def test_airflow_connection_sets_a_query_tag():
+    import gen_airflow_env
+
+    text = gen_airflow_env.render(
+        {"SNOWFLAKE_ACCOUNT": "a", "SNOWFLAKE_DATABASE": "D", "SNOWFLAKE_AIRFLOW_USER": "U"}
+    )
+    conn = json.loads(text.split("AIRFLOW_CONN_SNOWFLAKE_DEFAULT=", 1)[1].splitlines()[0])
+    assert conn["extra"]["session_parameters"]["QUERY_TAG"] == "airflow"
