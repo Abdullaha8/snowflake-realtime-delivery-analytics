@@ -283,6 +283,9 @@ def streamlit_deploy() -> int:
             f"CREATE OR REPLACE STREAMLIT {db}.APPS.FOODDEL_DASHBOARD"
             f" FROM '@{db}.APPS.STREAMLIT_SRC/fooddel'"
             " MAIN_FILE = 'fooddel_app.py' QUERY_WAREHOUSE = WH_BI"
+            # Pin the warehouse runtime (environment.yml, runs on WH_BI). New accounts default to
+            # the container runtime, which needs pyproject.toml and bills a compute pool.
+            " RUNTIME_NAME = 'SYSTEM$WAREHOUSE_RUNTIME'"
             " TITLE = 'fooddel - Pune food delivery analytics'"
         )
         cur.execute(f"ALTER STREAMLIT {db}.APPS.FOODDEL_DASHBOARD ADD LIVE VERSION FROM LAST")

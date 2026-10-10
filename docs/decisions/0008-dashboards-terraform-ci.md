@@ -20,6 +20,11 @@
 - **Deployment:** `make streamlit-deploy` PUTs the files to an internal stage, then runs
   `CREATE STREAMLIT … FROM '@stage'` (the current syntax; `ROOT_LOCATION` is legacy) and adds
   a live version.
+- **Runtime pinned to `SYSTEM$WAREHOUSE_RUNTIME`.** New accounts default `CREATE STREAMLIT` to
+  the container runtime. That runtime needs a `pyproject.toml` and bills a compute pool
+  (`SYSTEM_COMPUTE_POOL_CPU`) while the app runs, and the first deploy failed with "pyproject.toml
+  does not exist". The warehouse runtime uses `environment.yml` and runs on WH_BI (XSMALL, 60 s
+  auto-suspend), which is simpler and cheaper for a single-user demo.
 
 *Rejected:* a separate dashboard tool. Streamlit in Snowflake needs no hosting, no extra
 credentials, and inherits Snowflake RBAC.
