@@ -105,4 +105,8 @@ P8 Streamlit dashboards, Terraform, GitHub Actions, final README, resume bullets
   - Roles: FOODDEL_PII_READER (inherits BI), FOODDEL_OPS_WEST/EAST; all granted to admin user. Test with USE SECONDARY ROLES NONE. `make sf-governance` → `make dbt` → `make governance-check` (6/6).
   - `make qa-clone` (clone + suspend DTs/alerts + Time Travel restore) / `make qa-drop`. `make cost-report` → docs/cost_report.md (1.03 credits total so far). Airflow conn sets QUERY_TAG=airflow.
   - Skipped by choice: SYSTEM$CLASSIFY, dbt build on clone.
-- [ ] P8
+- [x] P8 (2026-10-10): Streamlit in Snowflake + Terraform + CI + final docs. ADR 0008. PROJECT COMPLETE.
+  - streamlit/fooddel_app.py + queries.py (4 tabs) → `make streamlit-deploy` → FOODDEL_DEV.APPS.FOODDEL_DASHBOARD (owner FOODDEL_BI, WH_BI). `make streamlit-smoke` 12/12 as BI. APPS schema in 01/02.
+  - infra/terraform (provider snowflakedb/snowflake 2.21.0, Terraform 1.16.3 via winget): modules/environment, PROD example; validate-only (`make tf-validate TERRAFORM=<path>`). DEV stays SQL-managed.
+  - .github/workflows/ci.yml: make install + make test; terraform fmt/validate. No git remote yet (runs on first push).
+  - docs: README (portfolio header + results), docs/resume_bullets.md, interview Q&A top 10.

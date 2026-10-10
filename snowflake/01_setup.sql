@@ -23,6 +23,8 @@ CREATE SCHEMA IF NOT EXISTS ${SNOWFLAKE_DATABASE}.ML
 COMMENT = 'ETA model: feature table, Model Registry models, predictions, accuracy';
 CREATE SCHEMA IF NOT EXISTS ${SNOWFLAKE_DATABASE}.GOVERNANCE
 COMMENT = 'Zone access mapping for row-level security';
+CREATE SCHEMA IF NOT EXISTS ${SNOWFLAKE_DATABASE}.APPS
+COMMENT = 'Streamlit in Snowflake apps (owned by FOODDEL_BI)';
 CREATE SCHEMA IF NOT EXISTS ${SNOWFLAKE_DATABASE}.MARTS_SECURE
 COMMENT = 'Secure views over MARTS: PII masked, rows filtered by zone (dbt models/secure)';
 

@@ -29,7 +29,7 @@ flowchart LR
 | P5 | done | Airflow 3 DAG (skip-if-no-data, DT refresh, dbt, DQ, latency), OPS schema, 3 Snowflake Alerts, SVC_AIRFLOW |
 | P6 | done | ETA model: dbt features, XGBoost pipeline in Snowflake Model Registry, in-warehouse scoring in the DAG, daily MAE + drift alert (test MAE 4.29 vs promised 6.45) |
 | P7 | done | Secure-view governance (Standard edition): PII masking + zone row filtering by role, zero-copy clone + Time Travel, cost report |
-| P8 | planned | see CLAUDE.md |
+| P8 | done | Streamlit in Snowflake dashboard (owned by FOODDEL_BI), Terraform environment module (validate-only), GitHub Actions CI, final docs |
 
 ## Local stack (`make up`)
 
@@ -162,3 +162,4 @@ flowchart LR
 - [ADR 0005: orchestration, data quality, alerts, latency](decisions/0005-orchestration-dq-alerts-latency.md)
 - [ADR 0006: ETA model, Model Registry, MAE tracking](decisions/0006-eta-model-registry-mae.md)
 - [ADR 0007: governance and cost](decisions/0007-governance-and-cost.md) · [cost report](cost_report.md)
+- [ADR 0008: dashboards, Terraform, CI](decisions/0008-dashboards-terraform-ci.md)

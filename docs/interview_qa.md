@@ -1,5 +1,50 @@
 # Interview Q&A
 
+## Top 10 questions (start here)
+
+1. **Walk me through the architecture.**
+   - **Ingest:** a simulator emits Avro events to Kafka; Schema Registry enforces the contract;
+     Snowpipe Streaming lands them in BRONZE as VARIANT.
+   - **Real time:** Dynamic Tables dedupe and rebuild order lifecycles (SILVER) and compute
+     surge, SLA and H3 aggregates (GOLD).
+   - **History:** dbt builds the star schema (MARTS).
+   - **ML:** an XGBoost ETA model lives in the Model Registry and scores in-warehouse.
+   - **Consumers:** Streamlit and BI read governed secure views.
+   - **Operations:** Airflow orchestrates; DQ results and Snowflake Alerts monitor.
+2. **How do you handle duplicates, late and out-of-order events?** Dedup by `event_id` with
+   `QUALIFY ROW_NUMBER()`. Order status comes from *which* events exist, never from arrival
+   order. Late data is recomputed rather than dropped by a watermark. I proved it against a
+   ground-truth manifest of every injected anomaly (37/37 metrics).
+3. **How do you know nothing was lost?** Every BRONZE row carries its Kafka partition and
+   offset; offsets must be contiguous, and the row count must equal the message count.
+4. **Why Dynamic Tables and dbt, and not one or the other?** Dynamic Tables suit continuously
+   refreshed, declarative aggregates. dbt suits tested, documented history: SCD2, incremental
+   facts, cohorts. dbt reads SILVER, so dedup logic exists once.
+5. **SCD2 with an event log?** I built it from the change events with `LEAD`, not a dbt
+   snapshot, because a snapshot only sees state at run time. Facts join point-in-time.
+6. **How did you build and evaluate the ETA model?** Features known at placement only, a
+   time-based split, a leakage test, and three baselines. MAE 4.29 vs 6.45 (−33%). Served from
+   the Model Registry; champion/challenger keeps a worse version from being promoted.
+7. **How is the pipeline monitored?** Data-quality results are persisted every run. Critical
+   failures fail fast without retrying. Serverless Alerts cover DQ, SLA spikes, ingest latency
+   and model drift. I proved it with an injected defect.
+8. **How do you protect PII?** On Standard edition: secure views built by dbt mask PII and
+   filter zones per role, and consumers have no grants on the tables. On Enterprise I'd use
+   tag-based masking and row access policies.
+9. **What did it cost and how did you control it?** About 1 credit:
+   - XSMALL warehouses with 60 s auto-suspend and resource monitors
+   - serverless ingestion
+   - incremental Dynamic Tables
+   - a metadata-only skip in Airflow
+   - query tags for attribution
+10. **What would you do next in production?**
+    - a Snowflake Budget for serverless spend
+    - Enterprise masking policies
+    - scheduled retraining
+    - Terraform-managed PROD
+    - CI running dbt tests with a service user
+    - Airflow on Astro/MWAA
+
 ## P1: Simulator
 
 **Why build a simulator instead of using a public dataset?**

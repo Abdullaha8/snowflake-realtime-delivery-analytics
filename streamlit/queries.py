@@ -1,0 +1,70 @@
+"""Every query the dashboard runs, in one place (also executed by the smoke test as FOODDEL_BI).
+
+The app is owned by FOODDEL_BI, so it can only see governed data: GOLD, MARTS_SECURE (PII
+masked), ML predictions/accuracy and OPS. `{db}` is replaced with the database name.
+"""
+
+QUERIES: dict[str, str] = {
+    # --- Live ops (GOLD Dynamic Tables) -------------------------------------------------------
+    "surge_latest": """
+        SELECT ZONE_ID, BUCKET_START_IST, ORDERS_PLACED, IDLE_DRIVERS, ONLINE_DRIVERS,
+               SURGE_MULTIPLIER
+        FROM {db}.GOLD.ZONE_DEMAND_SUPPLY_5M
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY ZONE_ID ORDER BY BUCKET_START_IST DESC) = 1
+        ORDER BY SURGE_MULTIPLIER DESC, ORDERS_PLACED DESC""",
+    "sla_by_zone": """
+        WITH LAST_WEEK AS (
+            SELECT MAX(PLACED_TS_IST) AS LATEST FROM {db}.GOLD.SLA_BREACHES
+        )
+        SELECT B.ZONE_ID, COUNT(*) AS SLA_BREACHES, ROUND(AVG(B.MINUTES_LATE), 1) AS AVG_MINUTES_LATE,
+               COUNT_IF(B.IS_RAINING) AS IN_RAIN
+        FROM {db}.GOLD.SLA_BREACHES AS B CROSS JOIN LAST_WEEK AS W
+        WHERE B.PLACED_TS_IST > DATEADD('day', -7, W.LATEST)
+        GROUP BY 1 ORDER BY 2 DESC""",
+    "at_risk": """
+        SELECT ORDER_ID, ORDER_STATUS, ZONE_ID, RESTAURANT_ID, ROUND(MINUTES_OVERDUE, 1) AS MINUTES_OVERDUE
+        FROM {db}.GOLD.V_ORDERS_AT_RISK ORDER BY MINUTES_OVERDUE DESC LIMIT 50""",
+    # --- Business KPIs (MARTS_SECURE) ---------------------------------------------------------
+    "kpi_daily": """
+        SELECT DATE_DAY, SUM(ORDERS_PLACED) AS ORDERS, SUM(ORDERS_DELIVERED) AS DELIVERED,
+               SUM(GMV_INR) AS GMV_INR,
+               ROUND(SUM(GMV_INR) / NULLIF(SUM(ORDERS_DELIVERED), 0), 2) AS AOV_INR,
+               ROUND(100 * SUM(SLA_BREACHES) / NULLIF(SUM(ORDERS_DELIVERED), 0), 2) AS SLA_BREACH_PCT
+        FROM {db}.MARTS_SECURE.V_MART_DAILY_KPIS GROUP BY 1 ORDER BY 1""",
+    "cohorts": """
+        SELECT TO_CHAR(COHORT_MONTH, 'YYYY-MM') AS COHORT, MONTHS_SINCE_FIRST_ORDER, RETENTION_PCT,
+               COHORT_CUSTOMERS
+        FROM {db}.MARTS_SECURE.V_MART_COHORT_RETENTION ORDER BY 1, 2""",
+    "top_restaurants": """
+        WITH LATEST AS (SELECT MAX(DATE_DAY) AS D FROM {db}.MARTS_SECURE.V_MART_RESTAURANT_DAILY)
+        SELECT R.RESTAURANT_NAME, R.CUISINE, R.ZONE_ID, SUM(R.ORDERS_PLACED) AS ORDERS,
+               SUM(R.GMV_INR) AS GMV_INR, ROUND(AVG(R.AVG_PREP_DELAY_MIN), 2) AS AVG_PREP_DELAY_MIN,
+               ROUND(100 * SUM(R.RESTAURANT_REJECTS) / NULLIF(SUM(R.ORDERS_PLACED), 0), 2) AS REJECT_PCT
+        FROM {db}.MARTS_SECURE.V_MART_RESTAURANT_DAILY AS R CROSS JOIN LATEST AS L
+        WHERE R.DATE_DAY > DATEADD('day', -30, L.D)
+        GROUP BY 1, 2, 3 ORDER BY GMV_INR DESC LIMIT 15""",
+    # --- ETA model (ML) ------------------------------------------------------------------------
+    "eta_accuracy": """
+        SELECT DATE_DAY, MODEL_VERSION, DELIVERED_ORDERS, MODEL_MAE, PROMISED_MAE, MODEL_BIAS
+        FROM {db}.ML.V_ETA_ACCURACY_DAILY ORDER BY DATE_DAY""",
+    "model_versions": """
+        SELECT VERSION_NAME, ROUND(TEST_MAE, 3) AS TEST_MAE, ROUND(BASELINE_PROMISED_MAE, 3) AS PROMISED_MAE,
+               ROUND(BASELINE_ZONE_HOUR_MAE, 3) AS ZONE_HOUR_MAE, PROMOTED, TRAINED_AT
+        FROM {db}.ML.MODEL_VERSIONS ORDER BY TRAINED_AT""",
+    # --- Pipeline health (OPS) -----------------------------------------------------------------
+    "pipeline_runs": """
+        SELECT RUN_ID, STATUS, FINISHED_AT, NEW_BRONZE_ROWS, FCT_ORDERS_ROWS, DQ_CRITICAL_FAILURES,
+               DQ_WARNINGS
+        FROM {db}.OPS.PIPELINE_RUNS ORDER BY FINISHED_AT DESC LIMIT 10""",
+    "dq_latest": """
+        SELECT CHECK_NAME, SEVERITY, OBSERVED, OPERATOR, THRESHOLD, STATUS
+        FROM {db}.OPS.DQ_RESULTS
+        QUALIFY RUN_ID = FIRST_VALUE(RUN_ID) OVER (ORDER BY CHECKED_AT DESC)
+        ORDER BY SEVERITY, CHECK_NAME""",
+    "latency": """
+        SELECT MEASURED_AT, EVENTS, P50_EMIT_TO_PUSH_S, P95_EMIT_TO_PUSH_S, GOLD_DATA_LAG_S
+        FROM {db}.OPS.LATENCY_METRICS ORDER BY MEASURED_AT DESC LIMIT 20""",
+    "alerts": """
+        SELECT ALERT_NAME, FIRED_AT, MESSAGE, EMAILED
+        FROM {db}.OPS.ALERT_LOG ORDER BY FIRED_AT DESC LIMIT 20""",
+}

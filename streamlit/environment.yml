@@ -1,0 +1,6 @@
+name: fooddel_app
+channels:
+  - snowflake
+dependencies:
+  - streamlit
+  - pandas

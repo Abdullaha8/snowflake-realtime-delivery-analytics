@@ -1,0 +1,37 @@
+# CI: everything that runs without cloud credentials. Snowflake-dependent checks (dbt tests,
+# reconciliations, governance matrix) run from the Makefile against a real account.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: lint + unit tests + dbt parse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install (.venv, all extras, dbt packages)
+        run: make install
+      - name: make test (ruff, black, sqlfluff, pytest, dbt parse)
+        run: make test
+
+  terraform:
+    name: terraform fmt + validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.3"
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate

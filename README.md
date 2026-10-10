@@ -1,21 +1,59 @@
 # Real-Time Food Delivery Analytics Platform (Pune)
 
-A Swiggy/Zomato-style delivery marketplace, simulated in Pune, feeding a Snowflake pipeline
-for near-real-time SLA breach detection, surge signals, ETA prediction and historical KPIs.
+An end-to-end data platform for a Swiggy/Zomato-style marketplace, simulated in Pune.
+Events stream from a Python simulator through Kafka into Snowflake. There they become
+near-real-time SLA and surge signals (Dynamic Tables), a tested star schema (dbt), an ETA
+model served from the Snowflake Model Registry, governed dashboards (Streamlit in Snowflake),
+and an orchestrated, monitored pipeline (Airflow, data quality, Snowflake Alerts).
 
-**Pipeline:** Python simulator → Kafka (KRaft) → Snowflake Kafka Connector → BRONZE → Dynamic
-Tables + dbt → Snowpark ML → Streamlit. See [docs/architecture.md](docs/architecture.md).
+```mermaid
+flowchart LR
+    SIM[Python simulator<br/>late / duplicate / out-of-order] -->|Avro + Schema Registry| K[(Kafka KRaft)]
+    K -->|Snowflake connector v4<br/>Snowpipe Streaming| B[BRONZE<br/>VARIANT]
+    B --> S[SILVER<br/>Dynamic Tables: dedup, lifecycle]
+    S --> G[GOLD<br/>surge, SLA, H3]
+    S --> D[dbt MARTS<br/>star schema, SCD2]
+    D --> ML[ETA model<br/>Model Registry]
+    D --> SV[MARTS_SECURE<br/>masked, zone-filtered]
+    G --> APP[Streamlit in Snowflake]
+    SV --> APP
+    ML --> APP
+    AF[Airflow 3] -.refresh, dbt, DQ, scoring.-> S
+    AF -.-> D
+    AL{{Snowflake Alerts}} -.-> APP
+```
+
+## Results (all verified against ground truth)
+
+| Area | Result |
+|---|---|
+| Ingestion | Kafka → BRONZE: every message landed (offset gaps = 0 on all partitions); producer → Snowflake **p50 0.21 s** |
+| Real-time layer | SILVER/GOLD Dynamic Tables reconciled **37/37** against the simulator's own numbers; duplicates removed = duplicates injected |
+| Historical layer | dbt star schema: **81 nodes green**; marts reconciled **35/35** (GMV ₹103,034,543 to the paisa, cohorts, retention) |
+| ETA model | XGBoost served in-warehouse: **MAE 4.29 min vs 6.45** for the current promise (−33%); in-warehouse MAE = offline MAE |
+| Operations | Airflow DAG skips the warehouse when there's no new data; injected bad data fails the run and fires an alert |
+| Governance | PII masked and rows filtered by zone per role: **6/6** role checks, still 6/6 after a full rebuild |
+| Cost | **≈1 credit** for everything above ([cost report](docs/cost_report.md)) |
+
+**Stack:**
+- **Ingest and storage:** Python, Kafka (KRaft) + Schema Registry + Kafka Connect, Snowflake (Snowpipe Streaming, Dynamic Tables)
+- **Transform and ML:** dbt Core, Snowpark ML + Model Registry, XGBoost
+- **Orchestration and apps:** Airflow 3 (Astro), Streamlit in Snowflake
+- **Infra and CI:** Terraform, GitHub Actions, Docker
+
+**Docs:** [architecture](docs/architecture.md) · [design decisions (ADRs)](docs/decisions/) ·
+[interview Q&A](docs/interview_qa.md) · [resume bullets](docs/resume_bullets.md) · [cost report](docs/cost_report.md)
 
 | Phase | | |
 |---|---|---|
-| P1 | ✅ | Repo scaffold, Makefile, event simulator + tests |
-| P2 | ✅ | Kafka topics, Schema Registry (Avro), Kafka Connect + Snowflake sink v4 → BRONZE, backfill COPY |
-| P3 | ✅ | SILVER/GOLD Dynamic Tables: dedup, order lifecycle, demand/supply + surge, SLA breaches, restaurant perf, H3 (reconciled 37/37 vs ground truth) |
-| P4 | ✅ | dbt star schema: incremental fct_orders, SCD2 restaurants (point-in-time), cohorts, daily KPIs; 58/58 dbt checks, 35/35 vs ground truth |
-| P5 | ✅ | Airflow 3 pipeline DAG, persisted data-quality checks, Snowflake Alerts, latency metric (p50 0.21 s producer→Snowflake) |
-| P6 | ✅ | ETA model (XGBoost) in Snowflake Model Registry, in-warehouse scoring, daily MAE + drift alert: test MAE 4.29 min vs 6.45 for the current promise |
-| P7 | ✅ | Governance on Standard edition: secure views mask PII and filter zones by role (6/6 checks), zero-copy clone + Time Travel, [cost report](docs/cost_report.md) (1.03 credits total) |
-| P8 | ⏳ | dashboards, Terraform, CI, final docs |
+| P1 | ✅ | Simulator with late / duplicate / out-of-order events and a ground-truth manifest |
+| P2 | ✅ | Kafka topics, Avro Schema Registry contract, Snowflake Kafka connector v4 → BRONZE |
+| P3 | ✅ | SILVER/GOLD Dynamic Tables: dedup, order lifecycle, demand/supply + surge, SLA breaches, H3 |
+| P4 | ✅ | dbt: incremental fact, event-sourced SCD2, cohorts, daily KPIs, 39+ tests |
+| P5 | ✅ | Airflow 3 DAG, persisted data-quality checks, Snowflake Alerts, latency metric |
+| P6 | ✅ | ETA model: leakage-safe features, Model Registry, champion/challenger, MAE tracking |
+| P7 | ✅ | Governance (secure views on Standard edition), zero-copy clone + Time Travel, cost report |
+| P8 | ✅ | Streamlit in Snowflake dashboard, Terraform module, GitHub Actions CI, final docs |
 
 ## Quick start
 
@@ -108,6 +146,15 @@ make qa-clone           # zero-copy clone + Time Travel restore demo; make qa-dr
 make cost-report        # docs/cost_report.md from ACCOUNT_USAGE
 ```
 
+### Dashboards, infra as code, CI (P8)
+
+```bash
+make streamlit-smoke    # every dashboard query, run as FOODDEL_BI (governed access)
+make streamlit-deploy   # APPS.FOODDEL_DASHBOARD: Snowsight > Projects > Streamlit
+make tf-validate        # Terraform module (env -> DB, schemas, XSMALL warehouses + monitors, roles); nothing applied
+# CI: .github/workflows/ci.yml runs make install + make test and terraform fmt/validate on every push
+```
+
 ## The simulator
 
 - **Entities:**
@@ -132,19 +179,20 @@ python -m simulator report <dir>    # volumes, KPIs, observed vs injected chaos
 python -m simulator schemas         # regenerate JSON Schemas
 ```
 
-Design rationale: [ADR 0001](docs/decisions/0001-simulator-design.md), [ADR 0002](docs/decisions/0002-kafka-schema-registry-snowflake-ingestion.md), [ADR 0003](docs/decisions/0003-dynamic-tables-silver-gold.md), [ADR 0004](docs/decisions/0004-dbt-historical-layer.md), [ADR 0005](docs/decisions/0005-orchestration-dq-alerts-latency.md), [ADR 0006](docs/decisions/0006-eta-model-registry-mae.md), [ADR 0007](docs/decisions/0007-governance-and-cost.md).
+Design rationale: [ADR 0001](docs/decisions/0001-simulator-design.md), [ADR 0002](docs/decisions/0002-kafka-schema-registry-snowflake-ingestion.md), [ADR 0003](docs/decisions/0003-dynamic-tables-silver-gold.md), [ADR 0004](docs/decisions/0004-dbt-historical-layer.md), [ADR 0005](docs/decisions/0005-orchestration-dq-alerts-latency.md), [ADR 0006](docs/decisions/0006-eta-model-registry-mae.md), [ADR 0007](docs/decisions/0007-governance-and-cost.md), [ADR 0008](docs/decisions/0008-dashboards-terraform-ci.md).
 
 ## Repo layout
 
 ```
 simulator/      event generator (zones, demand, entities, engine, chaos, sinks, report)
-infra/          docker-compose (Kafka, Schema Registry, Connect, kafka-ui), topic script, connector config
-snowflake/      numbered, idempotent SQL: 01_setup, 02_rbac, 03_bronze, 04_backfill_copy, 05_silver, 06_gold, 90/91_verify
+infra/          docker-compose (Kafka, Schema Registry, Connect, kafka-ui), topic script, connector config, terraform/
+snowflake/      numbered, idempotent SQL: 01 setup … 10 governance, 90/91 verify
 scripts/        sf.py (Snowflake runner, DT ops), connect.py (Connect REST), reconcile*.py (ground-truth checks), gen_zone_seeds.py
 dbt/            dbt project: staging -> intermediate -> marts, SCD2 snapshot, seeds, tests
 airflow/        Astro project: fooddel_pipeline DAG, DQ checks, DAG integrity tests
 ml/             ETA model: features/metrics/promotion (features.py), train.py, backtest.py, score.py
-streamlit/      later phase
-docs/           architecture, ADRs, interview Q&A
+streamlit/      Streamlit in Snowflake dashboard (fooddel_app.py, queries.py)
+.github/        CI workflow
+docs/           architecture, ADRs, interview Q&A, resume bullets, cost report
 tests/          pytest
 ```

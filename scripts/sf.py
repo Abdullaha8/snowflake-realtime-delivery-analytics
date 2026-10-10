@@ -10,6 +10,7 @@ python scripts/sf.py dt status|suspend|resume|refresh
 python scripts/sf.py dt lag '1 minute'      set GOLD target lag (SILVER stays DOWNSTREAM)
 python scripts/sf.py reset-bronze           DEV only: truncate the BRONZE tables
 python scripts/sf.py alerts setup|resume|suspend|status
+python scripts/sf.py streamlit-deploy       upload streamlit/ and (re)create APPS.FOODDEL_DASHBOARD
 """
 
 from __future__ import annotations
@@ -264,6 +265,31 @@ def alerts(action: str) -> int:
     return 0
 
 
+def streamlit_deploy() -> int:
+    """Upload the app to an internal stage and create the Streamlit object, owned by FOODDEL_BI."""
+    db = os.environ.get("SNOWFLAKE_DATABASE", "FOODDEL_DEV")
+    src = (ROOT / "streamlit").as_posix()
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("USE ROLE FOODDEL_BI")
+        cur.execute("USE SECONDARY ROLES NONE")
+        cur.execute(f"CREATE STAGE IF NOT EXISTS {db}.APPS.STREAMLIT_SRC")
+        for name in ("fooddel_app.py", "queries.py", "environment.yml"):
+            cur.execute(
+                f"PUT 'file://{src}/{name}' @{db}.APPS.STREAMLIT_SRC/fooddel "
+                "AUTO_COMPRESS=FALSE OVERWRITE=TRUE"
+            )
+            print(f"uploaded {name}")
+        cur.execute(
+            f"CREATE OR REPLACE STREAMLIT {db}.APPS.FOODDEL_DASHBOARD"
+            f" FROM '@{db}.APPS.STREAMLIT_SRC/fooddel'"
+            " MAIN_FILE = 'fooddel_app.py' QUERY_WAREHOUSE = WH_BI"
+            " TITLE = 'fooddel - Pune food delivery analytics'"
+        )
+        cur.execute(f"ALTER STREAMLIT {db}.APPS.FOODDEL_DASHBOARD ADD LIVE VERSION FROM LAST")
+        print(f"deployed {db}.APPS.FOODDEL_DASHBOARD (open it in Snowsight > Projects > Streamlit)")
+    return 0
+
+
 def reset_bronze() -> int:
     db = os.environ.get("SNOWFLAKE_DATABASE", "")
     if not db.endswith("_DEV"):
@@ -298,6 +324,8 @@ def main(argv: list[str]) -> int:
         return dt(rest[0], rest[1] if len(rest) > 1 else None)
     if cmd == "reset-bronze":
         return reset_bronze()
+    if cmd == "streamlit-deploy":
+        return streamlit_deploy()
     if cmd == "alerts" and rest and rest[0] in ("setup", "resume", "suspend", "status"):
         return alerts(rest[0])
     print(__doc__)
