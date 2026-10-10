@@ -15,6 +15,10 @@ vars:
   # fct_orders re-merges orders whose latest event was emitted within this window. Late events
   # in the simulator arrive up to 6 h late, so 24 h covers them with margin.
   incremental_lookback_hours: 24
+  # ETA model: time-based split by IST placement date (P6, ADR 0006)
+  eta_train_end: "2026-09-15"
+  eta_valid_end: "2026-09-30"
+  eta_test_end: "2026-10-09"
 
 models:
   fooddel:
@@ -27,6 +31,9 @@ models:
       +materialized: table
     marts:
       +schema: MARTS
+      +materialized: table
+    ml:
+      +schema: ML
       +materialized: table
 
 seeds:

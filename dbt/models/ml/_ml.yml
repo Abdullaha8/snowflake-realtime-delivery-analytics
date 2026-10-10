@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: ml_eta_features
+    description: >
+      ETA model features, one row per order, using only information available when the order
+      is placed. SPLIT = TRAIN / VALID / TEST / LIVE by IST placement date (dbt vars
+      eta_train_end / eta_valid_end / eta_test_end). Target ACTUAL_DELIVERY_MIN is NULL unless
+      the order was delivered.
+    columns:
+      - name: ORDER_ID
+        data_tests: [unique, not_null]
+      - name: SPLIT
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [TRAIN, VALID, TEST, LIVE]
+      - name: ZONE_ID
+        data_tests: [not_null]
+      - name: CUISINE
+        data_tests: [not_null]
+      - name: DISTANCE_KM
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "BETWEEN 0 AND 30"
+      - name: RESTAURANT_AVG_PREP_MIN
+        data_tests: [not_null]
+      - name: ZONE_ORDERS_PREV_30M
+        data_tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+      - name: RESTAURANT_ORDERS_PREV_30M
+        data_tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"

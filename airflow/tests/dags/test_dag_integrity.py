@@ -24,6 +24,7 @@ def test_pipeline_shape(dagbag):
         "refresh_dynamic_tables",
         "dbt_build",
         "data_quality",
+        "score_eta",
         "record_latency",
         "record_run",
     ]

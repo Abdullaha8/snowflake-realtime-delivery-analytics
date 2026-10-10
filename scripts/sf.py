@@ -226,7 +226,12 @@ def dt(action: str, arg: str | None = None) -> int:
     return 0
 
 
-ALERTS = ("ALERT_DQ_FAILED", "ALERT_SLA_SPIKE", "ALERT_INGEST_LATENCY")
+ALERTS = (
+    "OPS.ALERT_DQ_FAILED",
+    "OPS.ALERT_SLA_SPIKE",
+    "OPS.ALERT_INGEST_LATENCY",
+    "ML.ALERT_ETA_DRIFT",
+)
 
 
 def alerts(action: str) -> int:
@@ -243,15 +248,16 @@ def alerts(action: str) -> int:
     with connect() as conn, conn.cursor() as cur:
         cur.execute("USE ROLE FOODDEL_TRANSFORM")
         if action == "status":
-            cur.execute(f"SHOW ALERTS IN SCHEMA {db}.OPS")
+            cur.execute(f"SHOW ALERTS IN DATABASE {db}")
             names = [d[0] for d in cur.description]
             for row in cur.fetchall():
                 d = dict(zip(names, row, strict=True))
-                print(f"  {d['name']:<22} {d['state']:<10} schedule={d['schedule']}")
+                name = f"{d['schema_name']}.{d['name']}"
+                print(f"  {name:<26} {d['state']:<10} schedule={d['schedule']}")
             return 0
         for name in ALERTS:
             try:
-                cur.execute(f"ALTER ALERT {db}.OPS.{name} {action.upper()}")
+                cur.execute(f"ALTER ALERT {db}.{name} {action.upper()}")
                 print(f"{name}: {action}")
             except ProgrammingError as e:
                 print(f"{name}: {action} skipped ({e.msg[:80]})")

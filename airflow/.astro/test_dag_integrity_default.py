@@ -43,9 +43,7 @@ def os_getenv_monkeypatch(key: str, *args, **kwargs):
         key == "JENKINS_HOME" and default is None
     ):  # fix https://github.com/astronomer/astro-cli/issues/601
         return None
-    if (
-        key == "PYTEST_THEME" and default is None
-    ):  # fix pytest validation of pygment styles
+    if key == "PYTEST_THEME" and default is None:  # fix pytest validation of pygment styles
         return None
     if default:
         return default  # otherwise return whatever default has been passed
@@ -70,9 +68,7 @@ _no_default = object()  # allow falsey defaults
 
 
 def variable_get_monkeypatch(key: str, default_var=_no_default, deserialize_json=False):
-    print(
-        f"Attempted to get Variable value during parse, returning a mocked value for {key}"
-    )
+    print(f"Attempted to get Variable value during parse, returning a mocked value for {key}")
 
     if default_var is not _no_default:
         return default_var

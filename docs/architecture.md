@@ -27,7 +27,8 @@ flowchart LR
 | P3 | done, reconciled 37/37 | SILVER Dynamic Tables (dedup, typing, order lifecycle), GOLD Dynamic Tables (demand/supply + surge, SLA breaches, restaurant perf, H3 hex demand), at-risk view |
 | P4 | done, reconciled 35/35 | dbt star schema on SILVER: fct_orders (incremental), SCD2 dim_restaurant, dim_customer/zone/driver/date, daily KPIs, cohort retention, restaurant daily |
 | P5 | done | Airflow 3 DAG (skip-if-no-data, DT refresh, dbt, DQ, latency), OPS schema, 3 Snowflake Alerts, SVC_AIRFLOW |
-| P6-P8 | planned | see CLAUDE.md |
+| P6 | done | ETA model: dbt features, XGBoost pipeline in Snowflake Model Registry, in-warehouse scoring in the DAG, daily MAE + drift alert (test MAE 4.29 vs promised 6.45) |
+| P7-P8 | planned | see CLAUDE.md |
 
 ## Local stack (`make up`)
 
@@ -124,9 +125,25 @@ flowchart LR
 | Airflow | http://localhost:8082 |
 | kafka-ui | http://localhost:8080 |
 
+## ETA model (P6)
+
+```mermaid
+flowchart LR
+    F[MARTS.FCT_ORDERS + DIM_RESTAURANT] --> FE[ML.ML_ETA_FEATURES<br/>dbt, known-at-placement only]
+    FE -->|Snowpark pull| T[ml/train.py<br/>local sklearn+XGBoost]
+    T -->|log_model + metrics| R[(Model Registry<br/>ML.ETA_XGB V1, V2...)]
+    T --> MV[(ML.MODEL_VERSIONS)]
+    R -->|default version| S[score_eta<br/>MODEL!PREDICT in warehouse]
+    FE --> S
+    S --> P[(ML.ETA_PREDICTIONS)]
+    P --> A[ML.V_ETA_ACCURACY_DAILY]
+    A --> D{{ALERT_ETA_DRIFT}}
+```
+
 ## Design rationale
 - [ADR 0001: simulator](decisions/0001-simulator-design.md)
 - [ADR 0002: Kafka, Schema Registry, Snowflake ingestion](decisions/0002-kafka-schema-registry-snowflake-ingestion.md)
 - [ADR 0003: SILVER/GOLD Dynamic Tables](decisions/0003-dynamic-tables-silver-gold.md)
 - [ADR 0004: dbt historical layer](decisions/0004-dbt-historical-layer.md)
 - [ADR 0005: orchestration, data quality, alerts, latency](decisions/0005-orchestration-dq-alerts-latency.md)
+- [ADR 0006: ETA model, Model Registry, MAE tracking](decisions/0006-eta-model-registry-mae.md)

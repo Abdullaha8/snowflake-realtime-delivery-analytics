@@ -214,3 +214,41 @@ key and my personal key never enter the Airflow containers.
 - Imports from `include/` are `include.fooddel...`, because Astro puts the project root on the
   path.
 - Astro's reverse proxy took port 8080, so I pinned the API server to 8082 with `--no-proxy`.
+
+## P6: ETA model, Model Registry, MAE tracking
+
+**How did you avoid leakage?**
+Every input is known when the order is placed: time, weather, zone, surge fee, the
+restaurant's attributes *as of that moment* (SCD2), basket, straight-line distance from
+coordinates, and orders placed in the zone or restaurant in the previous 30 minutes. A unit
+test rejects any post-placement column. A dbt test recomputes the 30-minute load feature with
+a strict "earlier orders only" self-join on 500 samples and must match exactly. The split is by
+time, not random.
+
+**How good is the model?**
+On the October test week (20k delivered orders), MAE is 4.29 minutes against 6.45 for today's
+promise: 33% better. It also beats a zone × hour average (7.53). On live orders the next day
+it scored 4.49 against 6.12. Distance and restaurant prep time carry most of the signal.
+
+**Why train locally but serve in Snowflake?**
+The training set is a few MB, so local training is free and simple. The model is logged to the
+Snowflake Model Registry with its metrics, and inference runs in the warehouse from SQL with
+`MODEL(ML.ETA_XGB, V1)!PREDICT(...)`. The orchestrator needs no ML libraries. I proved the two
+agree: the in-warehouse MAE matched the offline MAE to four decimals. One gotcha: package
+versions must exist in Snowflake's Anaconda channel, so I pinned xgboost 3.2.0, not PyPI's
+latest.
+
+**How do you avoid deploying a worse model?**
+Champion/challenger. Every training run logs a new registry version, but it only becomes the
+default if its test MAE is strictly better. Scoring always uses the default. I demonstrated it
+with a weaker V2 (MAE 5.57): logged, not promoted.
+
+**How do you track accuracy in production?**
+Every prediction is stored with its model version. A daily view compares model MAE with the
+promised-ETA MAE on delivered orders. A drift alert fires when a day's MAE exceeds 1.3× the
+version's test MAE. It evaluated to false on live data, which is correct.
+
+**Why is the bias negative?**
+I optimise absolute error, which predicts the median. Delivery times are right-skewed, so the
+median sits slightly below the mean. For a customer-facing promise you'd predict a higher
+quantile (say p80) to keep SLA breaches down. For accuracy, the median is the right target.

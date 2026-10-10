@@ -19,6 +19,8 @@ CREATE SCHEMA IF NOT EXISTS ${SNOWFLAKE_DATABASE}.STAGING
 COMMENT = 'dbt staging/intermediate models and snapshots (not exposed to BI)';
 CREATE SCHEMA IF NOT EXISTS ${SNOWFLAKE_DATABASE}.OPS
 COMMENT = 'Pipeline operations: runs, data-quality results, latency metrics, alerts';
+CREATE SCHEMA IF NOT EXISTS ${SNOWFLAKE_DATABASE}.ML
+COMMENT = 'ETA model: feature table, Model Registry models, predictions, accuracy';
 
 -- Warehouses: XSMALL, suspend after 60 s idle, created suspended so setup costs nothing.
 -- Snowpipe Streaming ingestion is serverless and does not use a warehouse at all.

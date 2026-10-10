@@ -13,7 +13,8 @@ Tables + dbt → Snowpark ML → Streamlit. See [docs/architecture.md](docs/arch
 | P3 | ✅ | SILVER/GOLD Dynamic Tables: dedup, order lifecycle, demand/supply + surge, SLA breaches, restaurant perf, H3 (reconciled 37/37 vs ground truth) |
 | P4 | ✅ | dbt star schema: incremental fct_orders, SCD2 restaurants (point-in-time), cohorts, daily KPIs; 58/58 dbt checks, 35/35 vs ground truth |
 | P5 | ✅ | Airflow 3 pipeline DAG, persisted data-quality checks, Snowflake Alerts, latency metric (p50 0.21 s producer→Snowflake) |
-| P6–P8 | ⏳ | ML, governance, dashboards |
+| P6 | ✅ | ETA model (XGBoost) in Snowflake Model Registry, in-warehouse scoring, daily MAE + drift alert: test MAE 4.29 min vs 6.45 for the current promise |
+| P7–P8 | ⏳ | governance, dashboards |
 
 ## Quick start
 
@@ -86,6 +87,16 @@ make alerts-resume      # demos only (serverless, every 10 min); make stop suspe
 make stop               # also stops Airflow and suspends Alerts
 ```
 
+### ETA model (P6)
+
+```bash
+make dbt ARGS="--select ml_eta_features+"   # feature table + tests (incl. leakage guard)
+make ml-setup           # ML.MODEL_VERSIONS, ETA_PREDICTIONS, V_ETA_ACCURACY_DAILY, ALERT_ETA_DRIFT (suspended)
+make ml-train           # train, compare with 3 baselines, log to Model Registry, promote only if better
+make ml-backtest        # score TEST in-warehouse; MAE must equal the offline result
+make ml-score           # score LIVE orders (the DAG's score_eta task does this every run)
+```
+
 ## The simulator
 
 - **Entities:**
@@ -110,7 +121,7 @@ python -m simulator report <dir>    # volumes, KPIs, observed vs injected chaos
 python -m simulator schemas         # regenerate JSON Schemas
 ```
 
-Design rationale: [ADR 0001](docs/decisions/0001-simulator-design.md), [ADR 0002](docs/decisions/0002-kafka-schema-registry-snowflake-ingestion.md), [ADR 0003](docs/decisions/0003-dynamic-tables-silver-gold.md), [ADR 0004](docs/decisions/0004-dbt-historical-layer.md), [ADR 0005](docs/decisions/0005-orchestration-dq-alerts-latency.md).
+Design rationale: [ADR 0001](docs/decisions/0001-simulator-design.md), [ADR 0002](docs/decisions/0002-kafka-schema-registry-snowflake-ingestion.md), [ADR 0003](docs/decisions/0003-dynamic-tables-silver-gold.md), [ADR 0004](docs/decisions/0004-dbt-historical-layer.md), [ADR 0005](docs/decisions/0005-orchestration-dq-alerts-latency.md), [ADR 0006](docs/decisions/0006-eta-model-registry-mae.md).
 
 ## Repo layout
 
@@ -121,7 +132,8 @@ snowflake/      numbered, idempotent SQL: 01_setup, 02_rbac, 03_bronze, 04_backf
 scripts/        sf.py (Snowflake runner, DT ops), connect.py (Connect REST), reconcile*.py (ground-truth checks), gen_zone_seeds.py
 dbt/            dbt project: staging -> intermediate -> marts, SCD2 snapshot, seeds, tests
 airflow/        Astro project: fooddel_pipeline DAG, DQ checks, DAG integrity tests
-ml/ streamlit/  later phases
+ml/             ETA model: features/metrics/promotion (features.py), train.py, backtest.py, score.py
+streamlit/      later phase
 docs/           architecture, ADRs, interview Q&A
 tests/          pytest
 ```

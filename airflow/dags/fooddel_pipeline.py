@@ -1,8 +1,8 @@
 """
 ### fooddel_pipeline: hourly batch layer
 
-`check_new_data` → `refresh_dynamic_tables` → `dbt_build` → `data_quality` → `record_latency`
-→ `record_run`
+`check_new_data` → `refresh_dynamic_tables` → `dbt_build` → `data_quality` → `score_eta`
+→ `record_latency` → `record_run`
 
 - **check_new_data** short-circuits the run when BRONZE has no new rows since the last
   successful run. It reads table metadata only (`SHOW TABLES`), so an idle hour costs no
@@ -12,6 +12,8 @@
 - **data_quality** runs `include/fooddel/dq_checks.py` and stores every result in
   `OPS.DQ_RESULTS`. A critical failure fails the run without retries (the data won't change
   on a retry); `ALERT_DQ_FAILED` then fires in Snowflake.
+- **score_eta** scores newly placed (LIVE) orders with the Model Registry's default ETA
+  model, in-warehouse (`MODEL(ML.ETA_XGB, <version>)!PREDICT`), into `ML.ETA_PREDICTIONS`.
 - **record_latency** stores producer → Snowflake latency and GOLD freshness in
   `OPS.LATENCY_METRICS`.
 - **record_run** always runs and writes `OPS.PIPELINE_RUNS`; the new-data watermark only moves
@@ -29,6 +31,7 @@ from airflow.sdk import Param, Variable, dag, task
 from airflow.sdk.exceptions import AirflowFailException
 from include.fooddel import snowflake_ops as sfo
 from include.fooddel.dq_checks import CHECKS, evaluate, summarize
+from include.fooddel.eta_scoring import score_new_orders
 
 CONN_ID = "snowflake_default"
 WATERMARK = "fooddel_bronze_rows_at_last_success"
@@ -125,6 +128,12 @@ def fooddel_pipeline():
         return summary
 
     @task
+    def score_eta() -> dict:
+        result = score_new_orders(_cursor(), sfo.DB)
+        print("eta scoring:", result)
+        return result
+
+    @task
     def record_latency(**context) -> dict:
         cur = _cursor()
         cur.execute(
@@ -179,9 +188,10 @@ def fooddel_pipeline():
     new_data = check_new_data()
     refreshed = refresh_dynamic_tables()
     dq = data_quality()
+    scored = score_eta()
     latency = record_latency()
     run = record_run(new_data)
-    new_data >> refreshed >> dbt_build >> dq >> latency >> run
+    new_data >> refreshed >> dbt_build >> dq >> scored >> latency >> run
 
 
 fooddel_pipeline()

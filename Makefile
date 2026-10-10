@@ -24,7 +24,7 @@ OUT ?= data/sim
 
 .PHONY: help install up build down stop topics schemas schemas-register schemas-check \
         connector-up connector-status connector-down sf-keygen sf-setup sf-verify sf-suspend \
-        load-backfill sf-reset-bronze dbt-deps dbt dbt-freshness dbt-docs dbt-docs-serve reconcile-marts seeds-gen sf-ops alerts-setup alerts-resume alerts-suspend alerts-status airflow-env airflow-up airflow-down airflow-test airflow-trigger sf-dt dt-status dt-refresh dt-demo dt-normal dt-suspend         dt-resume sf-verify-dt reconcile sim sim-sample sim-backfill sim-report lint format test test-integration clean
+        load-backfill sf-reset-bronze dbt-deps dbt dbt-freshness dbt-docs dbt-docs-serve reconcile-marts seeds-gen sf-ops alerts-setup alerts-resume alerts-suspend alerts-status ml-setup ml-train ml-backtest ml-score airflow-env airflow-up airflow-down airflow-test airflow-trigger sf-dt dt-status dt-refresh dt-demo dt-normal dt-suspend         dt-resume sf-verify-dt reconcile sim sim-sample sim-backfill sim-report lint format test test-integration clean
 
 help:  ## list targets
 	@$(PY) -c "import re;[print(f'  {m[0]:<18}{m[1]}') for m in re.findall(r'^([a-z-]+):.*?## (.*)$$', open('Makefile').read(), re.M)]"
@@ -32,7 +32,7 @@ help:  ## list targets
 install:  ## create .venv (Python 3.11) and install deps
 	$(BOOTSTRAP_PY) -m venv .venv
 	$(PY) -m pip install --upgrade pip
-	$(PY) -m pip install -e ".[kafka,snowflake,dbt,dev]"
+	$(PY) -m pip install -e ".[kafka,snowflake,dbt,ml,dev]"
 	$(DBT) deps $(DBT_DIRS)
 
 # --- local streaming stack ---------------------------------------------------------------
@@ -180,6 +180,19 @@ airflow-test:  ## DAG integrity tests inside the Astro image
 airflow-trigger:  ## trigger one fooddel_pipeline run now
 	cd airflow && $(ASTRO) dev run dags trigger fooddel_pipeline
 
+# --- ETA model (P6) -----------------------------------------------------------------------
+ml-setup:  ## ML tables: MODEL_VERSIONS, ETA_PREDICTIONS, V_ETA_ACCURACY_DAILY, ALERT_ETA_DRIFT (suspended)
+	$(PY) scripts/sf.py run snowflake/09_ml.sql
+
+ml-train:  ## train, log to Model Registry, promote only if better. ARGS="--drop FEATURE,..."
+	$(PY) ml/train.py $(ARGS)
+
+ml-backtest:  ## score TEST in-warehouse; MAE must match the offline result
+	$(PY) ml/backtest.py
+
+ml-score:  ## score LIVE orders not yet scored by the default version (what the DAG does)
+	$(PY) ml/score.py
+
 # --- simulator ---------------------------------------------------------------------------
 sim:  ## live simulator, auto-stops after DURATION wall seconds (SINK=stdout|jsonl|kafka)
 	$(PY) -m simulator run --mode live --sink $(SINK) --duration $(DURATION) --speed $(SPEED) --out $(OUT) $(ARGS)
@@ -196,13 +209,13 @@ sim-report:  ## summarise a jsonl run: make sim-report OUT=data/sample
 
 # --- quality -----------------------------------------------------------------------------
 lint:  ## ruff + black --check + sqlfluff
-	$(PY) -m ruff check simulator scripts tests airflow/dags airflow/include airflow/tests
-	$(PY) -m black --check simulator scripts tests airflow/dags airflow/include airflow/tests
+	$(PY) -m ruff check simulator scripts tests ml airflow/dags airflow/include airflow/tests
+	$(PY) -m black --check simulator scripts tests ml airflow/dags airflow/include airflow/tests
 	$(PY) -m sqlfluff lint snowflake
 
 format:  ## ruff --fix + black + sqlfluff fix
-	$(PY) -m ruff check --fix simulator scripts tests airflow/dags airflow/include airflow/tests
-	$(PY) -m black simulator scripts tests airflow/dags airflow/include airflow/tests
+	$(PY) -m ruff check --fix simulator scripts tests ml airflow/dags airflow/include airflow/tests
+	$(PY) -m black simulator scripts tests ml airflow/dags airflow/include airflow/tests
 	$(PY) -m sqlfluff fix snowflake -f
 
 # Offline only: `dbt parse` validates the dbt project without a warehouse. dbt's data tests
