@@ -10,7 +10,7 @@ __pycache__/
 .ruff_cache/
 
 # generated data
-data/
+/data/
 
 # editors / OS
 .vscode/

@@ -1,5 +1,7 @@
 # Real-Time Food Delivery Analytics Platform (Pune)
 
+[![CI](https://github.com/Abdullaha8/snowflake-realtime-delivery-analytics/actions/workflows/ci.yml/badge.svg)](https://github.com/Abdullaha8/snowflake-realtime-delivery-analytics/actions/workflows/ci.yml)
+
 An end-to-end data platform for a Swiggy/Zomato-style marketplace, simulated in Pune.
 Events stream from a Python simulator through Kafka into Snowflake. There they become
 near-real-time SLA and surge signals (Dynamic Tables), a tested star schema (dbt), an ETA

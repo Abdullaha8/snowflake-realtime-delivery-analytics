@@ -1,0 +1,16 @@
+# Pune delivery zones. Each zone = H3 res-8 cells within k=2 rings of the centre cell.
+# profile drives the hour-of-day shape (see simulator/demand.py); weight = share of demand,
+# restaurants, customers and drivers.
+zones:
+  - {zone_id: HINJEWADI,     name: Hinjewadi,     lat: 18.5913, lng: 73.7389, profile: it_park,     weight: 1.3}
+  - {zone_id: WAKAD,         name: Wakad,         lat: 18.5989, lng: 73.7653, profile: residential, weight: 1.0}
+  - {zone_id: BANER,         name: Baner,         lat: 18.5590, lng: 73.7868, profile: residential, weight: 1.1}
+  - {zone_id: AUNDH,         name: Aundh,         lat: 18.5580, lng: 73.8075, profile: residential, weight: 0.9}
+  - {zone_id: KOTHRUD,       name: Kothrud,       lat: 18.5074, lng: 73.8077, profile: residential, weight: 1.1}
+  - {zone_id: SHIVAJINAGAR,  name: Shivajinagar,  lat: 18.5308, lng: 73.8475, profile: residential, weight: 0.9}
+  - {zone_id: CAMP,          name: Camp,          lat: 18.5158, lng: 73.8770, profile: nightlife,   weight: 0.9}
+  - {zone_id: KOREGAON_PARK, name: Koregaon Park, lat: 18.5362, lng: 73.8940, profile: nightlife,   weight: 1.3}
+  - {zone_id: KALYANI_NAGAR, name: Kalyani Nagar, lat: 18.5463, lng: 73.9033, profile: nightlife,   weight: 1.0}
+  - {zone_id: VIMAN_NAGAR,   name: Viman Nagar,   lat: 18.5679, lng: 73.9143, profile: nightlife,   weight: 1.2}
+  - {zone_id: MAGARPATTA,    name: Magarpatta,    lat: 18.5158, lng: 73.9272, profile: it_park,     weight: 1.0}
+  - {zone_id: HADAPSAR,      name: Hadapsar,      lat: 18.4966, lng: 73.9417, profile: residential, weight: 0.8}
