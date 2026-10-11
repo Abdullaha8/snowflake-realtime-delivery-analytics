@@ -37,6 +37,33 @@ flowchart LR
 | Governance | PII masked and rows filtered by zone per role: **6/6** role checks, still 6/6 after a full rebuild |
 | Cost | **≈1 credit** for everything above ([cost report](docs/cost_report.md)) |
 
+## Screenshots
+
+**Streamlit in Snowflake dashboard** (runs as FOODDEL_BI, so it only sees governed data):
+
+| Live ops: surge per zone, SLA breaches, at-risk orders | ETA model: daily MAE vs the promised ETA |
+|---|---|
+| ![Live ops](docs/images/dashboard-live-ops.png) | ![ETA model](docs/images/dashboard-eta-model.png) |
+| **Business KPIs: GMV, AOV, cohort retention, top restaurants** | **Pipeline health: Airflow runs, DQ checks, latency, alerts** |
+| ![Business KPIs](docs/images/dashboard-business-kpis.png) | ![Pipeline health](docs/images/dashboard-pipeline-health.png) |
+
+**Airflow 3 pipeline**: a forced run end to end, and the run history: the red run is an injected data defect caught by data quality; pink runs are skipped because there was no new data.
+
+![Airflow DAG](docs/images/airflow-dag-graph.png)
+![Airflow run history](docs/images/airflow-run-grid.png)
+
+**dbt lineage**: SILVER sources → staging → intermediate (event-sourced SCD2) → star schema → marts → secure views, with tests.
+
+![dbt lineage](docs/images/dbt-lineage.png)
+
+**Governance proof**: the same secure views return masked or clear PII, and different zones, per role.
+
+![Governance check](docs/images/terminal-governance.png)
+
+**Tests**: lint, SQL lint, 71 unit tests, dbt parse, and every dashboard query run as the BI role.
+
+![Tests](docs/images/terminal-tests.png)
+
 **Stack:**
 - **Ingest and storage:** Python, Kafka (KRaft) + Schema Registry + Kafka Connect, Snowflake (Snowpipe Streaming, Dynamic Tables)
 - **Transform and ML:** dbt Core, Snowpark ML + Model Registry, XGBoost

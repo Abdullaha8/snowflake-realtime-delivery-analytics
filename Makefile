@@ -25,7 +25,7 @@ OUT ?= data/sim
 
 .PHONY: help install up build down stop topics schemas schemas-register schemas-check \
         connector-up connector-status connector-down sf-keygen sf-setup sf-verify sf-suspend \
-        load-backfill sf-reset-bronze dbt-deps dbt dbt-freshness dbt-docs dbt-docs-serve reconcile-marts seeds-gen sf-ops alerts-setup alerts-resume alerts-suspend alerts-status ml-setup ml-train ml-backtest ml-score sf-governance governance-check qa-clone qa-drop cost-report streamlit-smoke streamlit-deploy tf-validate airflow-env airflow-up airflow-down airflow-test airflow-trigger sf-dt dt-status dt-refresh dt-demo dt-normal dt-suspend         dt-resume sf-verify-dt reconcile sim sim-sample sim-backfill sim-report lint format test test-integration clean
+        load-backfill sf-reset-bronze dbt-deps dbt dbt-freshness dbt-docs dbt-docs-serve reconcile-marts seeds-gen sf-ops alerts-setup alerts-resume alerts-suspend alerts-status ml-setup ml-train ml-backtest ml-score sf-governance governance-check qa-clone qa-drop cost-report streamlit-smoke streamlit-local streamlit-deploy tf-validate airflow-env airflow-up airflow-down airflow-test airflow-trigger sf-dt dt-status dt-refresh dt-demo dt-normal dt-suspend         dt-resume sf-verify-dt reconcile sim sim-sample sim-backfill sim-report lint format test test-integration clean
 
 help:  ## list targets
 	@$(PY) -c "import re;[print(f'  {m[0]:<18}{m[1]}') for m in re.findall(r'^([a-z-]+):.*?## (.*)$$', open('Makefile').read(), re.M)]"
@@ -213,6 +213,9 @@ cost-report:  ## ACCOUNT_USAGE -> docs/cost_report.md (credits by service/wareho
 # --- dashboards + infra as code (P8) -----------------------------------------------------
 streamlit-smoke:  ## run every dashboard query as FOODDEL_BI (governed access check)
 	$(PY) scripts/streamlit_smoke.py
+
+streamlit-local:  ## run the dashboard locally against Snowflake as FOODDEL_BI (needs: pip install streamlit)
+	$(PY) -m streamlit run scripts/streamlit_local.py
 
 streamlit-deploy:  ## upload streamlit/ and (re)create APPS.FOODDEL_DASHBOARD (owned by FOODDEL_BI)
 	$(PY) scripts/sf.py streamlit-deploy

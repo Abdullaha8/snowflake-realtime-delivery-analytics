@@ -54,7 +54,9 @@ with business:
     st.subheader("Cohort retention (% of cohort active N months after first order)")
     cohorts = q("cohorts")
     st.dataframe(
-        cohorts.pivot(index="COHORT", columns="MONTHS_SINCE_FIRST_ORDER", values="RETENTION_PCT"),
+        cohorts.pivot(
+            index="COHORT", columns="MONTHS_SINCE_FIRST_ORDER", values="RETENTION_PCT"
+        ).style.format("{:.1f}", na_rep=""),
         use_container_width=True,
     )
     st.subheader("Top restaurants - last 30 days (prep delay, reject rate)")
@@ -81,6 +83,10 @@ with health:
     st.dataframe(q("dq_latest"), hide_index=True, use_container_width=True)
     st.subheader("Latency: producer -> Snowflake (s) and GOLD freshness (s)")
     st.dataframe(q("latency"), hide_index=True, use_container_width=True)
+    st.caption(
+        "Accelerated replays are excluded. A large value is a catch-up after the connector was "
+        "stopped (events waited in Kafka), not steady-state latency."
+    )
     st.subheader("Alerts fired")
     st.dataframe(q("alerts"), hide_index=True, use_container_width=True)
 
